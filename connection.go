@@ -156,6 +156,9 @@ func Open(name ...string) error {
 		if keyPrefix != "" {
 			cfg.KeyPrefix = keyPrefix
 		}
+		if cfg.KeyPrefix == "" {
+			goutils.Fatalf("REDIS%s_KEY_PREFIX must be set", connName)
+		}
 
 		// set the configuration
 		configs[connName] = &cfg
@@ -215,7 +218,7 @@ func Close(name ...string) error {
 }
 
 // Returns the Redis client with name. If name is not provided, the default connection will be returned.
-func Client(ctx ...context.Context) interface{} {
+func Client(ctx ...context.Context) redis.UniversalClient {
 	if len(clients) == 0 {
 		goutils.Fatal("Redis client is not initialized")
 	}
@@ -234,6 +237,24 @@ func Client(ctx ...context.Context) interface{} {
 	}
 
 	return clients[connName.(string)]
+}
+
+// Returns the Redis configuration with name. If name is not provided, the default config will be returned.
+func GetConfig(ctx ...context.Context) *Config {
+	if len(configs) == 0 {
+		return nil
+	}
+
+	if len(ctx) == 0 {
+		return configs["default"]
+	}
+
+	connName := ctx[0].Value(goutils.CtxConnNameKey)
+	if connName == nil || connName == "" {
+		return configs["default"]
+	}
+
+	return configs[connName.(string)]
 }
 
 // Print the Redis connection information with name. If name is not provided, the default connection will be printed.

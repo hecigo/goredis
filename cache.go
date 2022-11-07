@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/go-redis/cache/v8"
-	"github.com/go-redis/redis/v8"
 	json "github.com/goccy/go-json"
 	"github.com/hpi-tech/goutils"
 )
@@ -23,9 +22,9 @@ func EnableCache(name ...string) {
 	}
 
 	for _, connName := range name {
-		if caches[connName] == nil {
-			goutils.Fatalf("Can not enable cache because Redis client `%s` is not initialized", connName)
-		}
+
+		// open the Redis connection
+		Open(connName)
 
 		// use local in-process storage to cache the small subset of popular keys
 		// default cache 10,000 keys for 1 minute
@@ -34,7 +33,7 @@ func EnableCache(name ...string) {
 
 		ctx := context.WithValue(context.Background(), goutils.CtxConnNameKey, connName)
 		caches[connName] = cache.New(&cache.Options{
-			Redis:      Client(ctx).(redis.UniversalClient),
+			Redis:      Client(ctx),
 			LocalCache: cache.NewTinyLFU(size, duration),
 			Marshal:    json.Marshal,
 			Unmarshal:  json.Unmarshal,
@@ -45,8 +44,6 @@ func EnableCache(name ...string) {
 		goutils.Infof("REDIS%s_TINYFLU_SIZE: %d\n", connName, size)
 		goutils.Infof("REDIS%s_TINYFLU_DURATION: %s\n", connName, duration)
 		goutils.Info("───────────────────────────────────\n")
-		goutils.Infof("Redis client `%s` is used as the cache backend:\n", connName)
-		Print(connName)
 	}
 }
 
