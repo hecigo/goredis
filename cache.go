@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
+	json "github.com/goccy/go-json"
 	"github.com/hpi-tech/goutils"
 )
 
@@ -35,6 +36,8 @@ func EnableCache(name ...string) {
 		caches[connName] = cache.New(&cache.Options{
 			Redis:      Client(ctx).(redis.UniversalClient),
 			LocalCache: cache.NewTinyLFU(size, duration),
+			Marshal:    json.Marshal,
+			Unmarshal:  json.Unmarshal,
 		})
 
 		// print the cache information
