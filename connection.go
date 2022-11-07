@@ -217,7 +217,7 @@ func Close(name ...string) error {
 // Returns the Redis client with name. If name is not provided, the default connection will be returned.
 func Client(ctx ...context.Context) interface{} {
 	if len(clients) == 0 {
-		goutils.Panic("Redis client is not initialized")
+		goutils.Fatal("Redis client is not initialized")
 	}
 
 	if len(ctx) == 0 {
@@ -227,6 +227,10 @@ func Client(ctx ...context.Context) interface{} {
 	connName := ctx[0].Value(goutils.CtxConnNameKey)
 	if connName == nil || connName == "" {
 		return clients["default"]
+	}
+
+	if clients[connName.(string)] == nil {
+		goutils.Fatalf("Redis client `%s` is not initialized", connName)
 	}
 
 	return clients[connName.(string)]
@@ -240,18 +244,18 @@ func Print(name ...string) {
 
 	for _, connName := range name {
 		if clients[connName] != nil {
-			goutils.Info("───── Redis[%s]: opened ─────", connName)
-			goutils.Info("  Addresses: %s", configs[connName].Addresses)
-			goutils.Info("  BasicAuth: %s", configs[connName].BasicAuth)
-			goutils.Info("  DB: %d", configs[connName].DB)
-			goutils.Info("  DialTimeout: %s", configs[connName].DialTimeout)
-			goutils.Info("  ReadTimeout: %s", configs[connName].ReadTimeout)
-			goutils.Info("  WriteTimeout: %s", configs[connName].WriteTimeout)
-			goutils.Info("  MasterName: %s", configs[connName].MasterName)
-			goutils.Info("  PoolSize: %d", configs[connName].PoolSize)
-			goutils.Info("  MaxRetries: %d", configs[connName].MaxRetries)
-			goutils.Info("  KeyPrefix: %s", configs[connName].KeyPrefix)
-			goutils.Info("───────────────────────────────")
+			goutils.Infof("───── Redis[%s]: opened ─────\n", connName)
+			goutils.Infof("  Addresses: %s\n", configs[connName].Addresses)
+			goutils.Infof("  BasicAuth: %s\n", configs[connName].BasicAuth)
+			goutils.Infof("  DB: %d\n", configs[connName].DB)
+			goutils.Infof("  DialTimeout: %s\n", configs[connName].DialTimeout)
+			goutils.Infof("  ReadTimeout: %s\n", configs[connName].ReadTimeout)
+			goutils.Infof("  WriteTimeout: %s\n", configs[connName].WriteTimeout)
+			goutils.Infof("  MasterName: %s\n", configs[connName].MasterName)
+			goutils.Infof("  PoolSize: %d\n", configs[connName].PoolSize)
+			goutils.Infof("  MaxRetries: %d\n", configs[connName].MaxRetries)
+			goutils.Infof("  KeyPrefix: %s\n", configs[connName].KeyPrefix)
+			goutils.Info("───────────────────────────────\n\n")
 		}
 	}
 }
