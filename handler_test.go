@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hpi-tech/goredis"
+	"github.com/hpi-tech/goutils"
 	. "gopkg.in/check.v1"
 )
 
@@ -16,9 +17,11 @@ type MySuite struct{}
 var _ = Suite(&MySuite{})
 
 func (s *MySuite) SetUpSuite(c *C) {
+	goutils.LoadEnv()
+	goutils.EnableLogrus()
+
 	// open redis client
 	goredis.Open()
-
 }
 
 func (s *MySuite) TearDownSuite(c *C) {
