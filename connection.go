@@ -29,7 +29,7 @@ type Config struct {
 
 	// The base authentication to login to the Redis server.
 	// Include the username and password, split by colon (e.g. username:password)
-	// Default: ""
+	// Default: ":", which means no authentication (empty username and password).
 	BasicAuth []string
 
 	// The default database to use.
@@ -87,7 +87,7 @@ func Open(name ...string) error {
 		// create default configuration
 		cfg := Config{
 			Addresses:    []string{"localhost:6379"},
-			BasicAuth:    []string{""},
+			BasicAuth:    []string{"", ""},
 			DB:           0,
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  3 * time.Second,
@@ -108,12 +108,12 @@ func Open(name ...string) error {
 		// override the default configuration if the connection name is not default
 
 		addresses := strings.Split(goutils.Env(fmt.Sprintf("REDIS%s_URL", connName), ""), ";")
-		if len(addresses) > 0 {
+		if len(addresses) > 0 && addresses[0] != "" {
 			cfg.Addresses = addresses
 		}
 
-		basicAuth := strings.Split(goutils.Env(fmt.Sprintf("REDIS%s_BASIC_AUTH", connName), ""), ":")
-		if len(basicAuth) > 0 {
+		basicAuth := strings.Split(goutils.Env(fmt.Sprintf("REDIS%s_BASIC_AUTH", connName), ":"), ":")
+		if len(basicAuth) > 0 && basicAuth[0] != "" {
 			cfg.BasicAuth = basicAuth
 		}
 
@@ -155,13 +155,15 @@ func Open(name ...string) error {
 		keyPrefix := goutils.Env(fmt.Sprintf("REDIS%s_KEY_PREFIX", connName), "")
 		if keyPrefix != "" {
 			cfg.KeyPrefix = keyPrefix
+		} else {
+			cfg.KeyPrefix = goutils.ToURL(goutils.AppName())
 		}
 		if cfg.KeyPrefix == "" {
 			goutils.Fatalf("REDIS%s_KEY_PREFIX must be set", connName)
 		}
 
 		// set the configuration
-		configs[connName] = &cfg
+		configs[cfg.ConnectionName] = &cfg
 
 		// create the Redis client
 		client := redis.NewUniversalClient(&redis.UniversalOptions{
@@ -183,13 +185,13 @@ func Open(name ...string) error {
 		}
 
 		// set the Redis client
-		if clients[connName] != nil {
-			Close(connName)
+		if clients[cfg.ConnectionName] != nil {
+			Close(cfg.ConnectionName)
 		}
-		clients[connName] = client
+		clients[cfg.ConnectionName] = client
 
 		// print the connection information
-		Print(connName)
+		Print(cfg.ConnectionName)
 	}
 
 	return nil
@@ -265,18 +267,19 @@ func Print(name ...string) {
 
 	for _, connName := range name {
 		if clients[connName] != nil {
-			goutils.Infof("───── Redis[%s]: opened ─────\n", connName)
-			goutils.Infof("  Addresses: %s\n", configs[connName].Addresses)
-			goutils.Infof("  BasicAuth: %s\n", configs[connName].BasicAuth)
-			goutils.Infof("  DB: %d\n", configs[connName].DB)
-			goutils.Infof("  DialTimeout: %s\n", configs[connName].DialTimeout)
-			goutils.Infof("  ReadTimeout: %s\n", configs[connName].ReadTimeout)
-			goutils.Infof("  WriteTimeout: %s\n", configs[connName].WriteTimeout)
-			goutils.Infof("  MasterName: %s\n", configs[connName].MasterName)
-			goutils.Infof("  PoolSize: %d\n", configs[connName].PoolSize)
-			goutils.Infof("  MaxRetries: %d\n", configs[connName].MaxRetries)
-			goutils.Infof("  KeyPrefix: %s\n", configs[connName].KeyPrefix)
-			goutils.Info("───────────────────────────────\n\n")
+			goutils.Printf("───── Redis[%s]: opened ─────", connName)
+			goutils.Printf("  Addresses: %s", configs[connName].Addresses)
+			goutils.Printf("  BasicAuth: %s", configs[connName].BasicAuth)
+			goutils.Printf("  DB: %d", configs[connName].DB)
+			goutils.Printf("  DialTimeout: %s", configs[connName].DialTimeout)
+			goutils.Printf("  ReadTimeout: %s", configs[connName].ReadTimeout)
+			goutils.Printf("  WriteTimeout: %s", configs[connName].WriteTimeout)
+			goutils.Printf("  MasterName: %s", configs[connName].MasterName)
+			goutils.Printf("  PoolSize: %d", configs[connName].PoolSize)
+			goutils.Printf("  MaxRetries: %d", configs[connName].MaxRetries)
+			goutils.Printf("  KeyPrefix: %s", configs[connName].KeyPrefix)
+			goutils.Print("───────────────────────────────")
+			goutils.Print("")
 		}
 	}
 }
