@@ -279,7 +279,6 @@ func Print(name ...string) {
 			goutils.Printf("  MaxRetries: %d", configs[connName].MaxRetries)
 			goutils.Printf("  KeyPrefix: %s", configs[connName].KeyPrefix)
 			goutils.Print("───────────────────────────────")
-			goutils.Print("")
 		}
 	}
 }
