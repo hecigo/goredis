@@ -31,7 +31,7 @@ func EnableCache(name ...string) {
 		size := goutils.Env(fmt.Sprintf("REDIS%s_TINYFLU_SIZE", connName), 10000)
 		duration := goutils.Env(fmt.Sprintf("REDIS%s_TINYFLU_DURATION", connName), time.Minute)
 
-		ctx := context.WithValue(context.Background(), goutils.CtxConnNameKey, connName)
+		ctx := context.WithValue(context.Background(), goutils.CtxKey_ConnName, connName)
 		caches[connName] = cache.New(&cache.Options{
 			Redis:      Client(ctx),
 			LocalCache: cache.NewTinyLFU(size, duration),
@@ -57,7 +57,7 @@ func Cache(ctx ...context.Context) *cache.Cache {
 		return caches["cache"]
 	}
 
-	connName := ctx[0].Value(goutils.CtxConnNameKey)
+	connName := ctx[0].Value(goutils.CtxKey_ConnName)
 	if connName == nil || connName == "" {
 		return caches["cache"]
 	}

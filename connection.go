@@ -229,7 +229,7 @@ func Client(ctx ...context.Context) redis.UniversalClient {
 		return clients["default"]
 	}
 
-	connName := ctx[0].Value(goutils.CtxConnNameKey)
+	connName := ctx[0].Value(goutils.CtxKey_ConnName)
 	if connName == nil || connName == "" {
 		return clients["default"]
 	}
@@ -251,7 +251,7 @@ func GetConfig(ctx ...context.Context) *Config {
 		return configs["default"]
 	}
 
-	connName := ctx[0].Value(goutils.CtxConnNameKey)
+	connName := ctx[0].Value(goutils.CtxKey_ConnName)
 	if connName == nil || connName == "" {
 		return configs["default"]
 	}
