@@ -34,9 +34,9 @@ const (
 //
 //     - T is a map[string]interface{}, then it always get from Redis HASH and return to a map[string]string (because Redis does not support other types).
 //
-//     - T is a slice, then it get from Redis [SET] as default;
+//     - T is a slice, then it get from Redis [STRING] as default;
 //     from Redis LIST if [ctx] contains key [CtxKey_RedisDataType] with value [LIST]; or
-//     from Redis STRING if [ctx] contains key [CtxKey_RedisDataType] with value [STRING].
+//     from Redis SET if [ctx] contains key [CtxKey_RedisDataType] with value [SET].
 //
 //  2. [ctx]: includes [goutils.CtxConnNameKey] to specify the connection name. It also used to get the key prefix and track APM.
 //
@@ -44,7 +44,7 @@ const (
 //
 // # Notes:
 //
-//  1. This function would return all elements in a Redis [LIST], so it is not recommended to use it for a long list.
+//  1. This function would return all elements in a Redis [LIST] or [SET], so it is not recommended to use it for a long list/set.
 func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("keys is empty")
@@ -67,12 +67,12 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	// slice
 	case reflect.Slice:
 		switch ctx.Value(CtxKey_RedisDataType) {
-		case STRING:
-			return getVariousKind[T](ctx, keys...)
+		case SET:
+			return getSet[T](ctx, keys...)
 		case LIST:
-			return getList[T](ctx, tType.Elem().Kind(), keys...)
+			return getList[T](ctx, keys...)
 		default:
-			return getSet[T](ctx, tType.Elem().Kind(), keys...)
+			return getVariousKind[T](ctx, keys...)
 		}
 
 	// time.Time, time.Duration, struct and various kinds of int, float, bool...
@@ -217,27 +217,17 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 }
 
 // Get set from Redis.
-func getSet[T any](ctx context.Context, tKind reflect.Kind, keys ...string) (interface{}, error) {
+func getSet[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("key is empty")
 	}
 
+	var t T
+
 	// get single key-value
 	if len(keys) == 1 {
-		val, err := Client(ctx).SMembers(ctx, addKeyPrefix(ctx, keys...)[0]).Result()
-		if err != nil {
-			if err == redis.Nil {
-				// redis.Nil means the key does not exist, so we just return nil
-				return nil, nil
-			}
-			return nil, err
-		}
-
-		if tKind == reflect.String {
-			return val, nil
-		}
-
-		return goutils.SliceStrConv[T](val)
+		cmd := Client(ctx).SMembers(ctx, addKeyPrefix(ctx, keys...)[0])
+		return redisCmdToSlice[T](ctx, reflect.TypeOf(t).Elem(), cmd)
 	}
 
 	// get multiple key-values
@@ -248,47 +238,21 @@ func getSet[T any](ctx context.Context, tKind reflect.Kind, keys ...string) (int
 		return nil
 	})
 
-	if err != nil {
-		if err == redis.Nil {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	r := make(map[string]*[]string)
-	for i, k := range removeKeyPrefix(ctx, keys...) {
-		val := cmds[i].(*redis.StringSliceCmd).Val()
-		if len(val) == 0 {
-			r[k] = nil
-		} else {
-			r[k] = &val
-		}
-	}
-	return r, nil
+	return redisCmdToMap[T](ctx, reflect.TypeOf(t).Elem(), keys, cmds, err)
 }
 
 // Get all elements of list from Redis.
-func getList[T any](ctx context.Context, tKind reflect.Kind, keys ...string) (interface{}, error) {
+func getList[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("key is empty")
 	}
 
+	var t T
+
 	// get single key-value
 	if len(keys) == 1 {
-		val, err := Client(ctx).LRange(ctx, addKeyPrefix(ctx, keys...)[0], 0, -1).Result()
-		if err != nil {
-			if err == redis.Nil {
-				// redis.Nil means the key does not exist, so we just return nil
-				return nil, nil
-			}
-			return nil, err
-		}
-
-		if tKind == reflect.String {
-			return val, nil
-		}
-
-		return goutils.SliceStrConv[T](val)
+		cmd := Client(ctx).LRange(ctx, addKeyPrefix(ctx, keys...)[0], 0, -1)
+		return redisCmdToSlice[T](ctx, reflect.TypeOf(t).Elem(), cmd)
 	}
 
 	// get multiple key-values
@@ -299,21 +263,60 @@ func getList[T any](ctx context.Context, tKind reflect.Kind, keys ...string) (in
 		return nil
 	})
 
+	return redisCmdToMap[T](ctx, reflect.TypeOf(t).Elem(), keys, cmds, err)
+}
+
+func redisCmdToSlice[T any](ctx context.Context, eleType reflect.Type, cmd *redis.StringSliceCmd) (interface{}, error) {
+	if cmd == nil {
+		return nil, errors.New("cmd is nil")
+	}
+
+	val, err := cmd.Result()
 	if err != nil {
 		if err == redis.Nil {
+			// redis.Nil means the key does not exist, so we just return nil
 			return nil, nil
 		}
 		return nil, err
 	}
 
-	r := make(map[string]*[]string)
+	temp, err := goutils.ReflectSliceStrConv(val, eleType)
+	if err != nil {
+		return nil, err
+	}
+	return goutils.Unmarshal[T](temp)
+}
+
+func redisCmdToMap[T any](ctx context.Context, eleType reflect.Type, keys []string, cmds []redis.Cmder, connErr error) (interface{}, error) {
+	if connErr != nil {
+		if connErr == redis.Nil {
+			return nil, nil
+		}
+		return nil, connErr
+	}
+
+	r := make(map[string]interface{})
 	for i, k := range removeKeyPrefix(ctx, keys...) {
-		val := cmds[i].(*redis.StringSliceCmd).Val()
-		if len(val) == 0 {
+		c := cmds[i].(*redis.StringSliceCmd)
+		if c.Err() == redis.Nil {
 			r[k] = nil
 		} else {
-			r[k] = &val
+			val := c.Val()
+			if len(val) == 0 {
+				r[k] = nil
+			} else {
+				temp, err := goutils.ReflectSliceStrConv(val, eleType)
+				if err != nil {
+					r[k] = err
+				}
+
+				r[k], err = goutils.Unmarshal[T](temp)
+				if err != nil {
+					r[k] = err
+				}
+			}
 		}
 	}
-	return r, nil
+
+	return goutils.Unmarshal[map[string]*T](r)
 }
