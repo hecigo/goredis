@@ -2,6 +2,7 @@ package goredis
 
 import (
 	"context"
+
 	"errors"
 	"reflect"
 	"strings"
@@ -30,13 +31,13 @@ const (
 //  1. [T]: the type of the value
 //
 //     - T is string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, time.Time, time.Duration or struct,
-//     then it will get from Redis STRING key and convert to the given type.
+//     it will get from Redis [STRING] key and convert to the given type.
 //
-//     - T is a map[string]interface{}, then it always get from Redis HASH and return to a map[string]string (because Redis does not support other types).
+//     - T is a map[string]any, it always get from Redis [HASH]. Because of Redis limitation, if T is a map of struct, recommended to use non-nested struct.
 //
-//     - T is a slice, then it get from Redis [STRING] as default;
-//     from Redis LIST if [ctx] contains key [CtxKey_RedisDataType] with value [LIST]; or
-//     from Redis SET if [ctx] contains key [CtxKey_RedisDataType] with value [SET].
+//     - T is a slice, it get from Redis [STRING] as default;
+//     from Redis [LIST] if [ctx] contains key [CtxKey_RedisDataType] with value [LIST]; or
+//     from Redis [SET] if [ctx] contains key [CtxKey_RedisDataType] with value [SET].
 //
 //  2. [ctx]: includes [goutils.CtxConnNameKey] to specify the connection name. It also used to get the key prefix and track APM.
 //
@@ -44,7 +45,7 @@ const (
 //
 // # Notes:
 //
-//  1. This function would return all elements in a Redis [LIST] or [SET], so it is not recommended to use it for a long list/set.
+//	This function would return all elements in a Redis [LIST] or [SET], so it is not recommended to use it for a long list/set.
 func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("keys is empty")
@@ -71,6 +72,14 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 			return getSet[T](ctx, keys...)
 		case LIST:
 			return getList[T](ctx, keys...)
+		default:
+			return getVariousKind[T](ctx, keys...)
+		}
+
+	case reflect.Struct:
+		switch ctx.Value(CtxKey_RedisDataType) {
+		case HASH:
+			return getHash[T](ctx, keys...)
 		default:
 			return getVariousKind[T](ctx, keys...)
 		}
@@ -175,6 +184,8 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 		return nil, errors.New("key is empty")
 	}
 
+	tIsTruct := ctx.Value(CtxKey_RedisDataType) == HASH
+
 	// get single key-value
 	if len(keys) == 1 {
 		val, err := Client(ctx).HGetAll(ctx, addKeyPrefix(ctx, keys...)[0]).Result()
@@ -186,7 +197,10 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 			return nil, err
 		}
 
-		return val, nil
+		if tIsTruct {
+			return goutils.Unmarshal[T](val)
+		}
+		return goutils.MapStrConv[T](val)
 	}
 
 	// get multiple key-values
@@ -203,17 +217,33 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 		return nil, err
 	}
 
-	r := make(map[string]*map[string]string)
+	r := make(map[string]interface{})
 	for i, k := range removeKeyPrefix(ctx, keys...) {
-		val := cmds[i].(*redis.StringStringMapCmd).Val()
-		if len(val) == 0 {
+		c := cmds[i].(*redis.StringStringMapCmd)
+		err := c.Err()
+		if err != nil {
 			r[k] = nil
+			if err != redis.Nil {
+				goutils.Error(err)
+			}
 		} else {
-			r[k] = &val
+			val := c.Val()
+			if len(val) == 0 {
+				r[k] = nil
+			} else {
+				if tIsTruct {
+					r[k], err = goutils.Unmarshal[T](val)
+				} else {
+					r[k], err = goutils.MapStrConv[T](val)
+				}
+				if err != nil {
+					goutils.Error(err)
+				}
+			}
 		}
 	}
 
-	return r, nil
+	return goutils.Unmarshal[map[string]*T](r)
 }
 
 // Get set from Redis.
@@ -298,8 +328,12 @@ func redisCmdToMap[T any](ctx context.Context, eleType reflect.Type, keys []stri
 	r := make(map[string]interface{})
 	for i, k := range removeKeyPrefix(ctx, keys...) {
 		c := cmds[i].(*redis.StringSliceCmd)
-		if c.Err() == redis.Nil {
+		err := c.Err()
+		if err != nil {
 			r[k] = nil
+			if err != redis.Nil {
+				goutils.Error(err)
+			}
 		} else {
 			val := c.Val()
 			if len(val) == 0 {
@@ -307,12 +341,14 @@ func redisCmdToMap[T any](ctx context.Context, eleType reflect.Type, keys []stri
 			} else {
 				temp, err := goutils.ReflectSliceStrConv(val, eleType)
 				if err != nil {
-					r[k] = err
+					r[k] = nil
+					goutils.Error(err)
 				}
 
 				r[k], err = goutils.Unmarshal[T](temp)
 				if err != nil {
-					r[k] = err
+					r[k] = nil
+					goutils.Error(err)
 				}
 			}
 		}
