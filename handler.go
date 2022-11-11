@@ -11,16 +11,18 @@ import (
 	"github.com/hpi-tech/goutils"
 )
 
-type ctxKeyType_RedisDataType string
+type ctxKeyType_Redis string
 
 const (
-	HASH                                          = "hash"
-	LIST                                          = "list"
-	SET                                           = "set"
-	ZSET                                          = "zset"
-	STRING                                        = "string"
-	Stream                                        = "stream"
-	CtxKey_RedisDataType ctxKeyType_RedisDataType = "redis_data_type"
+	HASH                               = "hash"
+	LIST                               = "list"
+	SET                                = "set"
+	ZSET                               = "zset" // sorted set
+	STRING                             = "string"
+	Stream                             = "stream"
+	CtxKey_DataType   ctxKeyType_Redis = "redis_data_type"
+	CtxKey_SliceStart ctxKeyType_Redis = "redis_slice_start"
+	CtxKey_SliceStop  ctxKeyType_Redis = "redis_slice_stop"
 )
 
 // Get one or multiple values by key(s). If the key does not exist, the value will be nil.
@@ -35,7 +37,7 @@ const (
 //
 //     - T is a map[string]any, it always get from Redis [HASH]. Because of Redis limitation, if T is a map of struct, recommended to use non-nested struct.
 //
-//     - T is a slice, it get from Redis [STRING] as default;
+//     - T is a slice, it will get from Redis [STRING] as default;
 //     from Redis [LIST] if [ctx] contains key [CtxKey_RedisDataType] with value [LIST]; or
 //     from Redis [SET] if [ctx] contains key [CtxKey_RedisDataType] with value [SET].
 //
@@ -45,7 +47,8 @@ const (
 //
 // # Notes:
 //
-//	This function would return all elements in a Redis [LIST] or [SET], so it is not recommended to use it for a long list/set.
+//  1. This function would return all elements in a Redis [LIST] or [SET] as default, so it is not recommended to use it for a long list/set.
+//  2. Allowing get a range from Redis [LIST] or [ZSET] (sorted set) by setting [ctx] with key [CtxKey_SliceStart] and [CtxKey_SliceStop].
 func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("keys is empty")
@@ -67,9 +70,11 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 
 	// slice
 	case reflect.Slice:
-		switch ctx.Value(CtxKey_RedisDataType) {
+		switch ctx.Value(CtxKey_DataType) {
 		case SET:
 			return getSet[T](ctx, keys...)
+		case ZSET:
+			return getSortedSet[T](ctx, keys...)
 		case LIST:
 			return getList[T](ctx, keys...)
 		default:
@@ -77,7 +82,7 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 		}
 
 	case reflect.Struct:
-		switch ctx.Value(CtxKey_RedisDataType) {
+		switch ctx.Value(CtxKey_DataType) {
 		case HASH:
 			return getHash[T](ctx, keys...)
 		default:
@@ -184,7 +189,7 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 		return nil, errors.New("key is empty")
 	}
 
-	tIsTruct := ctx.Value(CtxKey_RedisDataType) == HASH
+	tIsTruct := ctx.Value(CtxKey_DataType) == HASH
 
 	// get single key-value
 	if len(keys) == 1 {
@@ -246,6 +251,45 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	return goutils.Unmarshal[map[string]*T](r)
 }
 
+// Get all elements of list from Redis.
+func getList[T any](ctx context.Context, keys ...string) (interface{}, error) {
+	if len(keys) == 0 {
+		return nil, errors.New("key is empty")
+	}
+
+	var (
+		t     T
+		start int64 = 0
+		stop  int64 = -1
+	)
+
+	// get list start and stop from context
+	i := ctx.Value(CtxKey_SliceStart)
+	if i != nil {
+		start = i.(int64)
+	}
+	i = ctx.Value(CtxKey_SliceStop)
+	if i != nil {
+		stop = i.(int64)
+	}
+
+	// get single key-value
+	if len(keys) == 1 {
+		cmd := Client(ctx).LRange(ctx, addKeyPrefix(ctx, keys...)[0], start, stop)
+		return redisCmdToSlice[T](ctx, reflect.TypeOf(t).Elem(), cmd)
+	}
+
+	// get multiple key-values
+	cmds, err := Client(ctx).TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		for _, k := range addKeyPrefix(ctx, keys...) {
+			pipe.LRange(ctx, k, start, stop)
+		}
+		return nil
+	})
+
+	return redisCmdToMap[T](ctx, reflect.TypeOf(t).Elem(), keys, cmds, err)
+}
+
 // Get set from Redis.
 func getSet[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
@@ -271,24 +315,38 @@ func getSet[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	return redisCmdToMap[T](ctx, reflect.TypeOf(t).Elem(), keys, cmds, err)
 }
 
-// Get all elements of list from Redis.
-func getList[T any](ctx context.Context, keys ...string) (interface{}, error) {
+// Get sorted set from Redis.
+func getSortedSet[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("key is empty")
 	}
 
-	var t T
+	var (
+		t     T
+		start int64 = 0
+		stop  int64 = -1
+	)
+
+	// get sorted set start and stop from context
+	i := ctx.Value(CtxKey_SliceStart)
+	if i != nil {
+		start = i.(int64)
+	}
+	i = ctx.Value(CtxKey_SliceStop)
+	if i != nil {
+		stop = i.(int64)
+	}
 
 	// get single key-value
 	if len(keys) == 1 {
-		cmd := Client(ctx).LRange(ctx, addKeyPrefix(ctx, keys...)[0], 0, -1)
+		cmd := Client(ctx).ZRange(ctx, addKeyPrefix(ctx, keys...)[0], start, stop)
 		return redisCmdToSlice[T](ctx, reflect.TypeOf(t).Elem(), cmd)
 	}
 
 	// get multiple key-values
 	cmds, err := Client(ctx).TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 		for _, k := range addKeyPrefix(ctx, keys...) {
-			pipe.LRange(ctx, k, 0, -1)
+			pipe.ZRange(ctx, k, start, stop)
 		}
 		return nil
 	})
@@ -296,6 +354,7 @@ func getList[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	return redisCmdToMap[T](ctx, reflect.TypeOf(t).Elem(), keys, cmds, err)
 }
 
+// read redis command result to slice
 func redisCmdToSlice[T any](ctx context.Context, eleType reflect.Type, cmd *redis.StringSliceCmd) (interface{}, error) {
 	if cmd == nil {
 		return nil, errors.New("cmd is nil")
@@ -317,6 +376,7 @@ func redisCmdToSlice[T any](ctx context.Context, eleType reflect.Type, cmd *redi
 	return goutils.Unmarshal[T](temp)
 }
 
+// read redis command result to map
 func redisCmdToMap[T any](ctx context.Context, eleType reflect.Type, keys []string, cmds []redis.Cmder, connErr error) (interface{}, error) {
 	if connErr != nil {
 		if connErr == redis.Nil {

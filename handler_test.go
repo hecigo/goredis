@@ -44,7 +44,7 @@ func (s *MySuite) TearDownSuite(c *C) {
 func (ms *MySuite) TestGetVariousKinds(c *C) {
 	// get value from redis
 	ctxBg := context.Background()
-	ctx := context.WithValue(context.Background(), goredis.CtxKey_RedisDataType, goredis.SET)
+	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.SET)
 
 	s, err := goredis.Get[string](ctx, "test_string")
 	c.Assert(err, IsNil)
@@ -110,7 +110,7 @@ func (ms *MySuite) TestGetHash(c *C) {
 	c.Assert(mmi, DeepEquals, map[string]*map[string]int{"test_hash_int": {"k1": 1, "k2": 2}, "test_hash_int2": {"k3": 3, "k4": 4}})
 
 	// struct
-	ctxHash := context.WithValue(ctx, goredis.CtxKey_RedisDataType, goredis.HASH)
+	ctxHash := context.WithValue(ctx, goredis.CtxKey_DataType, goredis.HASH)
 	g, err := goredis.Get[Geo](ctxHash, "test_hash_struct3")
 	c.Assert(err, IsNil)
 	c.Assert(g, DeepEquals, Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"})
@@ -131,7 +131,7 @@ func (my *MySuite) TestGetSlice(c *C) {
 	// LIST
 
 	// []string
-	ctxList := context.WithValue(ctx, goredis.CtxKey_RedisDataType, goredis.LIST)
+	ctxList := context.WithValue(ctx, goredis.CtxKey_DataType, goredis.LIST)
 	s, err := goredis.Get[[]string](ctxList, "test_slice_list")
 	c.Assert(err, IsNil)
 	c.Assert(s, DeepEquals, []string{"v1", "v2"})
@@ -161,7 +161,7 @@ func (my *MySuite) TestGetSlice(c *C) {
 	// SET
 
 	// []int
-	ctxSet := context.WithValue(ctx, goredis.CtxKey_RedisDataType, goredis.SET)
+	ctxSet := context.WithValue(ctx, goredis.CtxKey_DataType, goredis.SET)
 	s, err = goredis.Get[[]int](ctxSet, "test_slice_set1")
 	c.Assert(err, IsNil)
 	c.Assert(s, DeepEquals, []int{1, 2})
