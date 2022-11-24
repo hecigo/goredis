@@ -126,7 +126,7 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 //  1. This function does not support to set value to Redis [ZSET] because [ZSET] is a special data type.
 //
 //  2. This function will delete the old key first, then set the new list/set, sothat should not use it to set a long list/set.
-func SetSingle(ctx context.Context, key string, value interface{}, expiration ...time.Duration) error {
+func Set(ctx context.Context, key string, value interface{}, expiration ...time.Duration) error {
 	if key == "" {
 		return errors.New("key is empty")
 	}
@@ -140,8 +140,7 @@ func SetSingle(ctx context.Context, key string, value interface{}, expiration ..
 	}
 
 	// get type of value
-	tType := reflect.TypeOf(value)
-	tKind := tType.Kind()
+	tKind := reflect.TypeOf(value).Kind()
 
 	switch tKind {
 	// string
@@ -171,6 +170,53 @@ func SetSingle(ctx context.Context, key string, value interface{}, expiration ..
 	// time.Time, time.Duration, struct and various kinds of int, float, bool...
 	default:
 		return setVariousKind(ctx, key, value, expi)
+	}
+}
+
+// Similar to [Set], but it support to set multiple keys at once.
+// Example: Set multiple Redis [HASH] at once.
+//
+//	var keyValues = make(map[string]interface{})
+//	// hash 1
+//	keyValues["hash1"] = map[string]interface{}{"field1": "value11", "field2": "value21"}
+//	// hash 2
+//	keyValues["hash2"] = map[string]interface{}{"field1": "value12", "field2": "value22"}
+//
+//	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.HASH)
+//	MSet(ctx, keyValues)
+func MSet(ctx context.Context, keyValues map[string]interface{}, expiration ...time.Duration) error {
+	var expi time.Duration = 0 // never expire
+	if len(expiration) > 1 {
+		expi = expiration[0]
+	}
+
+	switch elKind := reflect.TypeOf(keyValues).Elem().Kind(); elKind {
+	// string
+	case reflect.String:
+		return setMultiVariousKind(ctx, keyValues, expi)
+
+	// map[string]any or struct
+	case reflect.Map | reflect.Struct:
+		switch ctx.Value(CtxKey_DataType) {
+		case HASH:
+			return setMultiHash(ctx, keyValues, expi)
+		default:
+			return setMultiVariousKind(ctx, keyValues, expi)
+		}
+
+	// slice
+	case reflect.Slice:
+		switch ctx.Value(CtxKey_DataType) {
+		case SET:
+			return setMultiSet(ctx, keyValues, expi)
+		case LIST:
+			return setMultiList(ctx, keyValues, expi)
+		default:
+			return setMultiVariousKind(ctx, keyValues, expi)
+		}
+
+	default:
+		return setMultiVariousKind(ctx, keyValues, expi)
 	}
 }
 
@@ -262,16 +308,37 @@ func getVariousKind[T any](ctx context.Context, keys ...string) (interface{}, er
 	}
 }
 
-// Set string(s) to Redis.
+// Set any value to Redis as string.
 func setVariousKind(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	status, err := Client(ctx).Set(ctx, addKeyPrefix(ctx, key)[0], value, expiration).Result()
 	if err != nil {
 		return err
 	}
 	if status != "OK" {
-		goutils.Errorf("setVariousKind: status is %s\n", status)
-		goutils.Errorf("key is %s\n", key)
-		goutils.Errorf(" value is %v\n", value)
+		goutils.Errorf("setVariousKind: status is %s", status)
+		goutils.Errorf("key is %s", key)
+		goutils.Errorf(" value is %v", value)
+		return errors.New("redis set status is not OK")
+	}
+	return nil
+}
+
+// Set multiple key-values to Redis as string.
+func setMultiVariousKind(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) error {
+	// add key prefix and convert keyValues to slice
+	var kv []interface{}
+	for k, v := range keyValues {
+		kv = append(kv, addKeyPrefix(ctx, k)[0], v)
+	}
+
+	// set
+	status, err := Client(ctx).MSet(ctx, kv).Result()
+	if err != nil {
+		return err
+	}
+	if status != "OK" {
+		goutils.Errorf("mSetVariousKind: status is %s", status)
+		goutils.Errorf("keyValues is %v", keyValues)
 		return errors.New("redis set status is not OK")
 	}
 	return nil
@@ -375,15 +442,65 @@ func setHash(ctx context.Context, key string, value interface{}, expiration time
 		return err
 	}
 	if !status {
-		goutils.Errorf("setHash: status is %v\n", status)
-		goutils.Errorf("key is %s\n", key)
-		goutils.Errorf(" value is %v\n", value)
+		goutils.Errorf("setHash: status is %v", status)
+		goutils.Errorf("key is %s", key)
+		goutils.Errorf(" value is %v", value)
 		return errors.New("redis set status is not OK")
 	}
 
 	// set expiration
 	err = setExpiration(ctx, key, expiration)
 	return err
+}
+
+// Similar to [setHash], but support multiple key-values with pipeline.
+func setMultiHash(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) (err error) {
+	// convert keyValues to map[string][]interface{}
+	var temp map[string][]interface{}
+	for key, value := range keyValues {
+		var val []interface{}
+		switch v := value.(type) {
+		case map[string]interface{}:
+			for k, v := range v {
+				val = append(val, k, v)
+			}
+		default:
+			m, err := goutils.Unmarshal[map[string]interface{}](v)
+			if err != nil {
+				return err
+			}
+			for k, v := range m {
+				val = append(val, k, v)
+			}
+		}
+		temp[key] = val
+	}
+
+	// set key-values
+	cmds, err := Client(ctx).TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		for key, val := range temp {
+			pipe.HMSet(ctx, addKeyPrefix(ctx, key)[0], val...)
+			pipe.Expire(ctx, addKeyPrefix(ctx, key)[0], expiration)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// check status
+	for _, cmd := range cmds {
+		err := cmd.Err()
+		if err != nil {
+			key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
+			goutils.Errorf("setMultiHash: %v", err)
+			goutils.Errorf("key is %s", key)
+			goutils.Errorf("value is %v", keyValues[key])
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Get all elements of list from Redis.
@@ -448,6 +565,45 @@ func setList(ctx context.Context, key string, value interface{}, expiration time
 	return err
 }
 
+// Similar to [setList], but support multiple key-values with pipeline.
+func setMultiList(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) (err error) {
+	// convert keyValues to map[string][]interface{}
+	var temp map[string][]interface{}
+	for key, value := range keyValues {
+		temp[key] = value.([]interface{})
+	}
+
+	// set key-values
+	cmds, err := Client(ctx).TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		for key, val := range temp {
+			key := addKeyPrefix(ctx, key)[0]
+			pipe.Del(ctx, key)
+			pipe.RPush(ctx, key, val...)
+			pipe.Expire(ctx, key, expiration)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// check status
+	for _, cmd := range cmds {
+		err := cmd.Err()
+
+		// get key from cmd
+		key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
+
+		if err != nil {
+			goutils.Errorf("setMultiList: %v", err)
+			goutils.Errorf("key is %s", key)
+			goutils.Errorf("value is %v", keyValues[key])
+			return err
+		}
+	}
+	return nil
+}
+
 // Get set from Redis.
 func getSet[T any](ctx context.Context, keys ...string) (interface{}, error) {
 	if len(keys) == 0 {
@@ -494,6 +650,45 @@ func setSet(ctx context.Context, key string, value interface{}, expiration time.
 	// set expiration
 	err = setExpiration(ctx, key, expiration)
 	return err
+}
+
+// Similar to [setSet], but support multiple key-values with pipeline.
+func setMultiSet(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) (err error) {
+	// convert keyValues to map[string][]interface{}
+	var temp map[string][]interface{}
+	for key, value := range keyValues {
+		temp[key] = value.([]interface{})
+	}
+
+	// set key-values
+	cmds, err := Client(ctx).TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		for key, val := range temp {
+			key := addKeyPrefix(ctx, key)[0]
+			pipe.Del(ctx, key)
+			pipe.SAdd(ctx, key, val...)
+			pipe.Expire(ctx, key, expiration)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// check status
+	for _, cmd := range cmds {
+		err := cmd.Err()
+
+		// get key from cmd
+		key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
+
+		if err != nil {
+			goutils.Errorf("setMultiSet: %v", err)
+			goutils.Errorf("key is %s", key)
+			goutils.Errorf("value is %v", keyValues[key])
+			return err
+		}
+	}
+	return nil
 }
 
 // Get sorted-set from Redis.
@@ -624,8 +819,8 @@ func setExpiration(ctx context.Context, key string, expiration time.Duration) er
 		return err
 	}
 	if !status {
-		goutils.Errorf("setExpiration: status is %v\n", status)
-		goutils.Errorf("key is %s\n", key)
+		goutils.Errorf("setExpiration: status is %v", status)
+		goutils.Errorf("key is %s", key)
 		return errors.New("redis set status is not OK")
 	}
 
