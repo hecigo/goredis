@@ -100,6 +100,31 @@ func (r *RankingBoard) Score(member string) (float64, error) {
 	return r.redis().ZScore(r.Context, r.Id, member).Result()
 }
 
+// Get scores of multiple members in the ranking board.
+// Returns a map of member => score.
+func (r *RankingBoard) Scores(members ...string) (map[string]float64, error) {
+	// get by pipeline
+	cmds, err := r.redis().TxPipelined(r.Context, func(pipe redis.Pipeliner) error {
+		for _, member := range members {
+			pipe.ZScore(r.Context, r.Id, member)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// parse result
+	m := make(map[string]float64)
+	for i, cmd := range cmds {
+		if cmd.Err() == nil {
+			m[members[i]] = cmd.(*redis.FloatCmd).Val()
+		}
+	}
+	return m, nil
+}
+
 // Get Redis client
 func (r *RankingBoard) redis() redis.UniversalClient {
 	return Client(r.Context)
