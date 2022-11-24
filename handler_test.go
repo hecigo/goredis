@@ -70,7 +70,7 @@ func (ms *MySuite) TestGetVariousKinds(c *C) {
 
 // Test get hash from Redis
 func (ms *MySuite) TestGetHash(c *C) {
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.HASH)
 
 	// map[string]string
 	m, err := goredis.Get[map[string]string](ctx, "test_hash")
