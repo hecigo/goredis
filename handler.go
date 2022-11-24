@@ -45,7 +45,7 @@ const (
 //
 //  2. [ctx]:
 //
-//     - Including [goutils.CtxConnNameKey] to specify the connection name. It also used to get the key prefix and track APM.
+//     - Including [goutils.CtxKey_ConnName] to specify the connection name. It also used to get the key prefix and track APM.
 //
 //     - Including [CtxKey_DataType] to specify the data type of the Redis key.
 //

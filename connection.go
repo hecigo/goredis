@@ -225,7 +225,7 @@ func Client(ctx ...context.Context) redis.UniversalClient {
 		goutils.Fatal("Redis client is not initialized")
 	}
 
-	if len(ctx) == 0 {
+	if len(ctx) == 0 || ctx[0] == nil {
 		return clients["default"]
 	}
 
