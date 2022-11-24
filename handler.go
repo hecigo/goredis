@@ -69,8 +69,7 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 
 	// get type of T
 	var t T
-	tType := reflect.TypeOf(t)
-	tKind := tType.Kind()
+	tKind := reflect.TypeOf(t).Kind()
 
 	switch tKind {
 	// string
@@ -78,7 +77,7 @@ func Get[T any](ctx context.Context, keys ...string) (interface{}, error) {
 		return getString(ctx, keys...)
 
 	// map[string]any or struct
-	case reflect.Map | reflect.Struct:
+	case reflect.Map, reflect.Struct:
 		switch ctx.Value(CtxKey_DataType) {
 		case HASH:
 			return getHash[T](ctx, keys...)
@@ -148,7 +147,7 @@ func Set(ctx context.Context, key string, value interface{}, expiration ...time.
 		return setVariousKind(ctx, key, value, expi)
 
 	// map[string]any or struct
-	case reflect.Map | reflect.Struct:
+	case reflect.Map, reflect.Struct:
 		switch ctx.Value(CtxKey_DataType) {
 		case HASH:
 			return setHash(ctx, key, value, expi)
@@ -196,7 +195,7 @@ func MSet(ctx context.Context, keyValues map[string]interface{}, expiration ...t
 		return setMultiVariousKind(ctx, keyValues, expi)
 
 	// map[string]any or struct
-	case reflect.Map | reflect.Struct:
+	case reflect.Map, reflect.Struct:
 		switch ctx.Value(CtxKey_DataType) {
 		case HASH:
 			return setMultiHash(ctx, keyValues, expi)
