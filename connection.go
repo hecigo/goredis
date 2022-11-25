@@ -247,7 +247,7 @@ func GetConfig(ctx ...context.Context) *Config {
 		return nil
 	}
 
-	if len(ctx) == 0 {
+	if len(ctx) == 0 || ctx[0] == nil {
 		return configs["default"]
 	}
 

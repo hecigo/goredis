@@ -36,7 +36,7 @@ func GetRankingBoard(ctx context.Context, args ...string) *RankingBoard {
 	}
 
 	return &RankingBoard{
-		Id:      args[0],
+		Id:      GetConfig(ctx).KeyPrefix + "." + args[0],
 		Context: ctx,
 	}
 }
@@ -116,7 +116,7 @@ func (r *RankingBoard) IncrByMulti(increments map[string]float64) (map[string]fl
 	for _, cmd := range cmds {
 		c := cmd.(*redis.FloatCmd)
 		if c.Err() == nil {
-			m[c.Args()[1].(string)] = c.Val()
+			m[c.Args()[3].(string)] = c.Val()
 		} else {
 			return nil, c.Err()
 		}
@@ -135,12 +135,10 @@ func (r *RankingBoard) Remove(member string) error {
 // Returns a map of member => score.
 func (r *RankingBoard) Top(n int64, orderBy ...bool) (map[string]float64, error) {
 	z, err := r.redis().ZRangeArgsWithScores(r.Context, redis.ZRangeArgs{
-		Key:    r.Id,
-		Start:  0,
-		Stop:   -1,
-		Offset: 0,
-		Count:  n,
-		Rev:    len(orderBy) == 0 || (len(orderBy) > 0 && orderBy[0]),
+		Key:   r.Id,
+		Start: 0,
+		Stop:  n - 1,
+		Rev:   len(orderBy) == 0 || (len(orderBy) > 0 && orderBy[0]),
 	}).Result()
 
 	if err != nil {
