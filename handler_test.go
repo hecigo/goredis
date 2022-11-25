@@ -2,19 +2,13 @@ package goredis_test
 
 import (
 	"context"
-	"flag"
-	"testing"
+	"fmt"
 	"time"
 
 	"github.com/hpi-tech/goredis"
 	"github.com/hpi-tech/goutils"
 	. "gopkg.in/check.v1"
 )
-
-var testCase = flag.String("case", "", "Select test case collection")
-
-// Hook up gocheck into the "go test" runner.
-func TestHandler(t *testing.T) { TestingT(t) }
 
 type HandlerSuite struct{}
 
@@ -31,15 +25,9 @@ type Geo struct {
 }
 
 func (s *HandlerSuite) SetUpSuite(c *C) {
-	if *testCase != "handler" {
-		c.Skip("bypass `handler` test")
-		return
-	}
-
+	fmt.Println("SetUpSuite > HandlerSuite")
 	goutils.LoadEnv()
 	goutils.EnableLogrus()
-
-	// open redis client
 	goredis.Open()
 }
 

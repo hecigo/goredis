@@ -2,27 +2,21 @@ package goredis_test
 
 import (
 	"context"
-	"testing"
+	"fmt"
 
 	"github.com/hpi-tech/goredis"
 	"github.com/hpi-tech/goutils"
 	. "gopkg.in/check.v1"
 )
 
-func TestRanking(t *testing.T) { TestingT(t) }
-
 type RankingSuite struct {
 	board *goredis.RankingBoard
 }
 
-var _ = Suite(&HandlerSuite{})
+var _ = Suite(&RankingSuite{})
 
 func (s *RankingSuite) SetUpSuite(c *C) {
-	if *testCase != "ranking" {
-		c.Skip("bypass `ranking` test")
-		return
-	}
-
+	fmt.Println("SetUpSuite > RankingSuite")
 	goutils.LoadEnv()
 	goutils.EnableLogrus()
 	goredis.Open()
