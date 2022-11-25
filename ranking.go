@@ -2,10 +2,10 @@ package goredis
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/hpi-tech/goutils"
 )
 
 type RankingBoard struct {
@@ -37,12 +37,8 @@ func GetRankingBoard(ctx context.Context, args ...string) *RankingBoard {
 		return nil
 	}
 
-	if len(args) > 1 {
-		ctx = context.WithValue(ctx, goutils.CtxKey_ConnName, args[1])
-	}
-
 	return &RankingBoard{
-		Id:      GetConfig(ctx).KeyPrefix + "." + args[0],
+		Id:      GetConfig(ctx).KeyPrefix + strings.Join(args, "_"),
 		Context: ctx,
 	}
 }
