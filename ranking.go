@@ -41,11 +41,16 @@ func GetRankingBoard(ctx context.Context, args ...string) *RankingBoard {
 	}
 }
 
+// Get Redis client
+func (r *RankingBoard) redis() redis.UniversalClient {
+	return Client(r.Context)
+}
+
 // Add a member to the ranking board with a score.
 // Don't like [IncrBy], this method will overwrite the score of the member if it already exists.
 // If a specified member is already in the sorted-set,
 // the score is updated and the element reinserted at the right position to ensure the correct ordering.
-// As default, only update existing elements if the new score is greater than the current score,
+// By default, only update existing elements if the new score is greater than the current score,
 // unless [kind] is set to [Upsert_LessThan]. This option doesn't prevent adding new elements.
 func (r *RankingBoard) Upsert(member string, score float64, kind ...RankingUpsertKind) error {
 	_, err := r.redis().ZAddArgs(r.Context, r.Id, redis.ZAddArgs{
@@ -57,10 +62,31 @@ func (r *RankingBoard) Upsert(member string, score float64, kind ...RankingUpser
 	return err
 }
 
-// Remove a member from the ranking board.
-func (r *RankingBoard) Remove(member string) error {
-	_, err := r.redis().ZRem(r.Context, r.Id, member).Result()
-	return err
+// Similar [Upsert], but supports multiple members.
+func (r *RankingBoard) UpsertMulti(members map[string]float64, kind ...RankingUpsertKind) error {
+	// get by pipeline
+	cmds, err := r.redis().TxPipelined(r.Context, func(pipe redis.Pipeliner) error {
+		for member, score := range members {
+			pipe.ZAddArgs(r.Context, r.Id, redis.ZAddArgs{
+				GT:      len(kind) == 0 || (len(kind) > 0 && kind[0] == Upsert_GreaterThan),
+				LT:      len(kind) > 0 && kind[0] == Upsert_LessThan,
+				Members: []redis.Z{{Member: member, Score: score}},
+			})
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// parse result
+	for _, cmd := range cmds {
+		if cmd.Err() != nil {
+			return cmd.Err()
+		}
+	}
+	return nil
 }
 
 // Increment the score of a member in the ranking board.
@@ -70,18 +96,51 @@ func (r *RankingBoard) IncrBy(member string, increment float64) (float64, error)
 	return r.redis().ZIncrBy(r.Context, r.Id, increment, member).Result()
 }
 
+// Similar [IncrBy], but supports multiple members.
+// Returns a map of member => new score.
+func (r *RankingBoard) IncrByMulti(increments map[string]float64) (map[string]float64, error) {
+	// get by pipeline
+	cmds, err := r.redis().TxPipelined(r.Context, func(pipe redis.Pipeliner) error {
+		for member, increment := range increments {
+			pipe.ZIncrBy(r.Context, r.Id, increment, member)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// parse result
+	m := make(map[string]float64)
+	for _, cmd := range cmds {
+		c := cmd.(*redis.FloatCmd)
+		if c.Err() == nil {
+			m[c.Args()[1].(string)] = c.Val()
+		} else {
+			return nil, c.Err()
+		}
+	}
+	return m, nil
+}
+
+// Remove a member from the ranking board.
+func (r *RankingBoard) Remove(member string) error {
+	_, err := r.redis().ZRem(r.Context, r.Id, member).Result()
+	return err
+}
+
 // Get TOP[n] members in the ranking board.
-// As default, the members are ordered from highest to lowest scores, unless [orderBy] is set to [false] (~ ascending).
+// By default, the members are ordered from highest to lowest scores, unless [orderBy] is set to [false] (~ ascending).
 // Returns a map of member => score.
 func (r *RankingBoard) Top(n int64, orderBy ...bool) (map[string]float64, error) {
 	z, err := r.redis().ZRangeArgsWithScores(r.Context, redis.ZRangeArgs{
-		Key:     r.Id,
-		Start:   0,
-		Stop:    -1,
-		ByScore: true,
-		Offset:  0,
-		Count:   n,
-		Rev:     len(orderBy) == 0 || (len(orderBy) > 0 && orderBy[0]),
+		Key:    r.Id,
+		Start:  0,
+		Stop:   -1,
+		Offset: 0,
+		Count:  n,
+		Rev:    len(orderBy) == 0 || (len(orderBy) > 0 && orderBy[0]),
 	}).Result()
 
 	if err != nil {
@@ -125,7 +184,8 @@ func (r *RankingBoard) Scores(members ...string) (map[string]float64, error) {
 	return m, nil
 }
 
-// Get Redis client
-func (r *RankingBoard) redis() redis.UniversalClient {
-	return Client(r.Context)
+// Delete the ranking board.
+func (r *RankingBoard) Delete() error {
+	_, err := r.redis().Del(r.Context, r.Id).Result()
+	return err
 }
