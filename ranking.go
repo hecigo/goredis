@@ -2,6 +2,7 @@ package goredis
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hpi-tech/goutils"
@@ -18,6 +19,11 @@ const (
 	Upsert_GreaterThan RankingUpsertKind = 0
 	Upsert_LessThan    RankingUpsertKind = 1
 )
+
+// Get Redis client
+func (r *RankingBoard) redis() redis.UniversalClient {
+	return Client(r.Context)
+}
 
 // Initialize a ranking board, and return a RankingBoard instance.
 // The ranking board is a sorted set in redis.
@@ -39,11 +45,6 @@ func GetRankingBoard(ctx context.Context, args ...string) *RankingBoard {
 		Id:      GetConfig(ctx).KeyPrefix + "." + args[0],
 		Context: ctx,
 	}
-}
-
-// Get Redis client
-func (r *RankingBoard) redis() redis.UniversalClient {
-	return Client(r.Context)
 }
 
 // Add a member to the ranking board with a score.
@@ -185,5 +186,11 @@ func (r *RankingBoard) Scores(members ...string) (map[string]float64, error) {
 // Delete the ranking board.
 func (r *RankingBoard) Delete() error {
 	_, err := r.redis().Del(r.Context, r.Id).Result()
+	return err
+}
+
+// Set expiration time of the ranking board.
+func (r *RankingBoard) Expire(ttl time.Duration) error {
+	_, err := r.redis().Expire(r.Context, r.Id, ttl).Result()
 	return err
 }

@@ -3,6 +3,7 @@ package goredis_test
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hpi-tech/goredis"
 	"github.com/hpi-tech/goutils"
@@ -70,4 +71,10 @@ func (s *RankingSuite) TestScores(c *C) {
 	result, err := s.board.Scores([]string{"member1", "member3"}...)
 	c.Assert(err, IsNil)
 	c.Assert(result, NotNil)
+}
+
+// Test Expire
+func (s *RankingSuite) TestExpire(c *C) {
+	err := s.board.Expire(time.Second * 30)
+	c.Assert(err, IsNil)
 }
