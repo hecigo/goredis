@@ -2,6 +2,7 @@ package goredis_test
 
 import (
 	"context"
+	"flag"
 	"testing"
 	"time"
 
@@ -10,12 +11,14 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+var testCase = flag.String("case", "", "Select test case collection")
+
 // Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) { TestingT(t) }
+func TestHandler(t *testing.T) { TestingT(t) }
 
-type MySuite struct{}
+type HandlerSuite struct{}
 
-var _ = Suite(&MySuite{})
+var _ = Suite(&HandlerSuite{})
 
 type TestStruct struct {
 	Geo Geo `json:"geo"`
@@ -27,7 +30,12 @@ type Geo struct {
 	DistanceType string `json:"distance_type"`
 }
 
-func (s *MySuite) SetUpSuite(c *C) {
+func (s *HandlerSuite) SetUpSuite(c *C) {
+	if *testCase != "handler" {
+		c.Skip("bypass `handler` test")
+		return
+	}
+
 	goutils.LoadEnv()
 	goutils.EnableLogrus()
 
@@ -35,13 +43,13 @@ func (s *MySuite) SetUpSuite(c *C) {
 	goredis.Open()
 }
 
-func (s *MySuite) TearDownSuite(c *C) {
+func (s *HandlerSuite) TearDownSuite(c *C) {
 	// close redis client
 	goredis.Close()
 }
 
 // Test get various kinds of data from Redis
-func (ms *MySuite) TestGetVariousKinds(c *C) {
+func (ms *HandlerSuite) TestGetVariousKinds(c *C) {
 	// get value from redis
 	ctxBg := context.Background()
 	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.SET)
@@ -69,7 +77,7 @@ func (ms *MySuite) TestGetVariousKinds(c *C) {
 }
 
 // Test get hash from Redis
-func (ms *MySuite) TestGetHash(c *C) {
+func (ms *HandlerSuite) TestGetHash(c *C) {
 	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.HASH)
 
 	// map[string]string
@@ -125,7 +133,7 @@ func (ms *MySuite) TestGetHash(c *C) {
 }
 
 // Test get slice from Redis
-func (my *MySuite) TestGetSlice(c *C) {
+func (my *HandlerSuite) TestGetSlice(c *C) {
 	ctx := context.Background()
 
 	// LIST
