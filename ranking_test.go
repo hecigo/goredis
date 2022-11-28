@@ -18,8 +18,7 @@ var _ = Suite(&RankingSuite{})
 
 func (s *RankingSuite) SetUpSuite(c *C) {
 	fmt.Println("SetUpSuite > RankingSuite")
-	goutils.LoadEnv()
-	goutils.EnableLogrus()
+	goutils.QuickLoad()
 	goredis.Open()
 	s.board = goredis.GetRankingBoard(context.Background(), "test_ranking")
 }

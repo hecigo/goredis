@@ -26,9 +26,7 @@ type Geo struct {
 
 func (s *HandlerSuite) SetUpSuite(c *C) {
 	fmt.Println("SetUpSuite > HandlerSuite")
-	goutils.LoadEnv()
-	goutils.EnableLogrus()
-	goutils.LoadLocation()
+	goutils.QuickLoad()
 	goredis.Open()
 }
 
