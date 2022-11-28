@@ -53,24 +53,31 @@ func (s *RankingSuite) TestIncrByMulti(c *C) {
 		"member5": 5,
 	}
 
-	_, err := s.board.IncrByMulti(increments)
+	r, err := s.board.IncrByMulti(increments)
 	c.Assert(err, IsNil)
+	fmt.Printf("\nTestIncrByMulti\n%v\n", r)
 }
 
 // Test Top
 func (s *RankingSuite) TestTop(c *C) {
-	_, err := s.board.Top(2, false)
+	r, err := s.board.Top(2, false)
 	c.Assert(err, IsNil)
+	fmt.Printf("\nTestTop[ASC]\n%v\n", r)
+
+	r, err = s.board.Top(2)
+	c.Assert(err, IsNil)
+	fmt.Printf("\nTestTop[DESC]\n%v\n", r)
 }
 
 // Test Scores
 func (s *RankingSuite) TestScores(c *C) {
-	_, err := s.board.Scores([]string{"member1", "member3"}...)
+	r, err := s.board.Scores([]string{"member1", "member3"}...)
 	c.Assert(err, IsNil)
+	fmt.Printf("\nTestScores\n%v\n", r)
 }
 
 // Test Expire
 func (s *RankingSuite) TestExpire(c *C) {
-	err := s.board.Expire(time.Second * 30)
+	err := s.board.Expire(time.Minute * 30)
 	c.Assert(err, IsNil)
 }

@@ -39,7 +39,7 @@ func GetRankingBoard(ctx context.Context, args ...string) *RankingBoard {
 	}
 
 	return &RankingBoard{
-		Id:      GetConfig(ctx).KeyPrefix + strings.Join(args, "_"),
+		Id:      GetConfig(ctx).KeyPrefix + "." + strings.Join(args, "_"),
 		Context: ctx,
 	}
 }
@@ -60,7 +60,7 @@ func (r *RankingBoard) Upsert(member string, score float64, kind ...RankingUpser
 	return err
 }
 
-// Similar [Upsert], but supports multiple members.
+// Similar [Upsert], but supports multiple members. Recommended for batch operations.
 func (r *RankingBoard) UpsertMulti(members map[string]float64, kind ...RankingUpsertKind) error {
 	// get by pipeline
 	cmds, err := r.redis().TxPipelined(r.Context, func(pipe redis.Pipeliner) error {
@@ -81,7 +81,8 @@ func (r *RankingBoard) UpsertMulti(members map[string]float64, kind ...RankingUp
 	// parse result
 	for _, cmd := range cmds {
 		if cmd.Err() != nil {
-			return cmd.Err()
+			goutils.Errorf("%s", cmd.String())
+			goutils.Error(cmd.Err())
 		}
 	}
 	return nil
@@ -92,9 +93,6 @@ func (r *RankingBoard) UpsertMulti(members map[string]float64, kind ...RankingUp
 // Returns the new score of the member.
 func (r *RankingBoard) IncrBy(member string, increment float64) (float64, error) {
 	rs, err := r.redis().ZIncrBy(r.Context, r.Id, increment, member).Result()
-	if err == redis.Nil {
-		return 0, nil
-	}
 	return rs, err
 }
 
@@ -121,10 +119,8 @@ func (r *RankingBoard) IncrByMulti(increments map[string]float64) (map[string]fl
 		if err == nil {
 			m[c.Args()[3].(string)] = c.Val()
 		} else {
-			if err == redis.Nil {
-				return nil, nil
-			}
-			return nil, err
+			goutils.Errorf("%s", c.String())
+			goutils.Error(err)
 		}
 	}
 	return m, nil
@@ -196,7 +192,8 @@ func (r *RankingBoard) Scores(members ...string) (map[string]float64, error) {
 			m[members[i]] = cmd.(*redis.FloatCmd).Val()
 		} else {
 			if err != redis.Nil {
-				goutils.Error("RankingBoard.Scores", "member", members[i], "error", err)
+				goutils.Errorf("%s", cmd.String())
+				goutils.Error(err)
 			}
 			m[members[i]] = 0
 		}
