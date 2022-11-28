@@ -1,5 +1,6 @@
-// `goredis` is a Go client for Redis. It's implemented in pure Go and supports
-// all Redis commands. It's compatible with Redis 6 and higher.
+// `goredis` is a Go client for Redis. It's implemented in pure Go and supports all Redis commands.
+// It's compatible with Redis 6 and higher.
+// View [handler_test.go] and [ranking_test.go] in source code for examples.
 //
 // `goredis` is a fork of [go-redis] with some changes to make it easier to use.
 //
