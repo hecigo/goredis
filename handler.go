@@ -53,9 +53,11 @@ const (
 //
 // # Notes:
 //
-//  1. Should not use this function to get a long list/set. It will cause performance issue.
+//  1. Should not use this function to get a long list/set/sorted-set, because it will load all values into memory.
 //
-//  2. Allowing get a range from Redis [LIST] or [ZSET] (sorted-set) by setting [ctx] with values:
+//  2. If you want to interact better with sorted-set, please use [RankingBoard] instead.
+//
+//  3. Allowing get a range from Redis [LIST] or [ZSET] (sorted-set) by setting [ctx] with values:
 //
 //     - [CtxKey_SliceStart]: the start index of the range
 //
