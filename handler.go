@@ -315,8 +315,8 @@ func setVariousKind(ctx context.Context, key string, value interface{}, expirati
 	}
 	if status != "OK" {
 		goutils.Errorf("setVariousKind: status is %s", status)
-		goutils.Errorf("key is %s", key)
-		goutils.Errorf(" value is %v", value)
+		goutils.Errorf("%s", key)
+		goutils.Errorf("%v", value)
 		return errors.New("redis set status is not OK")
 	}
 	return nil
@@ -478,8 +478,9 @@ func setMultiHash(ctx context.Context, keyValues map[string]interface{}, expirat
 	// set key-values
 	cmds, err := Client(ctx).TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 		for key, val := range temp {
-			pipe.HMSet(ctx, addKeyPrefix(ctx, key)[0], val...)
-			pipe.Expire(ctx, addKeyPrefix(ctx, key)[0], expiration)
+			key = addKeyPrefix(ctx, key)[0]
+			pipe.HMSet(ctx, key, val...)
+			pipe.Expire(ctx, key, expiration)
 		}
 		return nil
 	})
@@ -492,9 +493,10 @@ func setMultiHash(ctx context.Context, keyValues map[string]interface{}, expirat
 		err := cmd.Err()
 		if err != nil {
 			key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
-			goutils.Errorf("setMultiHash: %v", err)
-			goutils.Errorf("key is %s", key)
-			goutils.Errorf("value is %v", keyValues[key])
+			goutils.Errorf("setMultiHash: cmd[%s]", cmd.Args()[0].(string))
+			goutils.Errorf("%s", key)
+			goutils.Errorf("%v", keyValues[key])
+			goutils.Error(err)
 			return err
 		}
 	}
@@ -594,9 +596,10 @@ func setMultiList(ctx context.Context, keyValues map[string]interface{}, expirat
 		key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
 
 		if err != nil {
-			goutils.Errorf("setMultiList: %v", err)
-			goutils.Errorf("key is %s", key)
-			goutils.Errorf("value is %v", keyValues[key])
+			goutils.Errorf("setMultiList: cmd[%s]", cmd.Args()[0].(string))
+			goutils.Errorf("%s", key)
+			goutils.Errorf("%v", keyValues[key])
+			goutils.Error(err)
 			return err
 		}
 	}
@@ -681,9 +684,10 @@ func setMultiSet(ctx context.Context, keyValues map[string]interface{}, expirati
 		key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
 
 		if err != nil {
-			goutils.Errorf("setMultiSet: %v", err)
-			goutils.Errorf("key is %s", key)
-			goutils.Errorf("value is %v", keyValues[key])
+			goutils.Errorf("setMultiSet: cmd[%s]", cmd.Args()[0].(string))
+			goutils.Errorf("%s", key)
+			goutils.Errorf("%v", keyValues[key])
+			goutils.Error(err)
 			return err
 		}
 	}
