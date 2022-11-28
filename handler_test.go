@@ -118,14 +118,19 @@ func (ms *HandlerSuite) TestHash(c *C) {
 	c.Assert(mm, DeepEquals, map[string]*map[string]string{"test_hash": {"k1": "v1", "k2": "v2"}, "test_hash2": {"k1": "v1", "k2": "v2"}})
 
 	// multiple keys of map[string]struct
+	tempStruct := map[string]TestStruct{
+		"geo": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
+	}
+	err = goredis.MSet(ctx, map[string]interface{}{
+		"test_hash_struct":  tempStruct,
+		"test_hash_struct2": tempStruct,
+	})
+	c.Assert(err, IsNil)
 	mm2, err := goredis.Get[map[string]TestStruct](ctx, "test_hash_struct", "test_hash_struct2")
 	c.Assert(err, IsNil)
 	c.Assert(mm2, DeepEquals, map[string]*map[string]TestStruct{
-		"test_hash_struct": {
-			"geo": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}},
-		"test_hash_struct2": {
-			"k3": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
-			"k4": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}},
+		"test_hash_struct":  &tempStruct,
+		"test_hash_struct2": &tempStruct,
 	})
 
 	// map[string]int
