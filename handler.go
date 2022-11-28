@@ -582,11 +582,14 @@ func getList[T any](ctx context.Context, keys ...string) (interface{}, error) {
 // Set list to Redis. The value must be a slice.
 // This action will delete the old list and set a new one.
 func setList(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	val := value.([]interface{})
+	val, err := goutils.Unmarshal[[]interface{}](value)
+	if err != nil {
+		return err
+	}
 	key = addKeyPrefix(ctx, key)[0]
 
 	// delete old list
-	_, err := Client(ctx).Del(ctx, key).Result()
+	_, err = Client(ctx).Del(ctx, key).Result()
 	if err != nil {
 		return err
 	}
@@ -605,9 +608,13 @@ func setList(ctx context.Context, key string, value interface{}, expiration time
 // Similar to [setList], but support multiple key-values with pipeline.
 func setMultiList(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) (err error) {
 	// convert keyValues to map[string][]interface{}
-	var temp map[string][]interface{}
+	temp := make(map[string][]interface{})
 	for key, value := range keyValues {
-		temp[key] = value.([]interface{})
+		val, err := goutils.Unmarshal[[]interface{}](value)
+		if err != nil {
+			return err
+		}
+		temp[key] = val
 	}
 
 	// set key-values
@@ -666,11 +673,14 @@ func getSet[T any](ctx context.Context, keys ...string) (interface{}, error) {
 // Set set to Redis. The value must be a slice.
 // This action will delete the old set and set a new one.
 func setSet(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	val := value.([]interface{})
+	val, err := goutils.Unmarshal[[]interface{}](value)
+	if err != nil {
+		return err
+	}
 	key = addKeyPrefix(ctx, key)[0]
 
 	// delete old set
-	_, err := Client(ctx).Del(ctx, key).Result()
+	_, err = Client(ctx).Del(ctx, key).Result()
 	if err != nil {
 		return err
 	}
@@ -689,9 +699,13 @@ func setSet(ctx context.Context, key string, value interface{}, expiration time.
 // Similar to [setSet], but support multiple key-values with pipeline.
 func setMultiSet(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) (err error) {
 	// convert keyValues to map[string][]interface{}
-	var temp map[string][]interface{}
+	temp := make(map[string][]interface{})
 	for key, value := range keyValues {
-		temp[key] = value.([]interface{})
+		val, err := goutils.Unmarshal[[]interface{}](value)
+		if err != nil {
+			return err
+		}
+		temp[key] = val
 	}
 
 	// set key-values

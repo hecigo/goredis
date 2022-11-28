@@ -164,16 +164,25 @@ func (my *HandlerSuite) TestGetSlice(c *C) {
 
 	// []string
 	ctxList := context.WithValue(ctx, goredis.CtxKey_DataType, goredis.LIST)
+	err := goredis.Set(ctxList, "test_slice_list", []string{"v1", "v2"})
+	c.Assert(err, IsNil)
 	s, err := goredis.Get[[]string](ctxList, "test_slice_list")
 	c.Assert(err, IsNil)
 	c.Assert(s, DeepEquals, []string{"v1", "v2"})
 
 	// []int
+	err = goredis.Set(ctxList, "test_slice_list_int", []int{1, 2})
+	c.Assert(err, IsNil)
 	i, err := goredis.Get[[]int](ctxList, "test_slice_list_int")
 	c.Assert(err, IsNil)
 	c.Assert(i, DeepEquals, []int{1, 2})
 
 	// multiple keys []int
+	err = goredis.MSet(ctxList, map[string]interface{}{
+		"test_slice_list_int":  []int{1, 2},
+		"test_slice_list_int2": []int{3, 4},
+	})
+	c.Assert(err, IsNil)
 	mi, err := goredis.Get[[]int](ctxList, "test_slice_list_int", "test_slice_list_int2")
 	c.Assert(err, IsNil)
 	c.Assert(mi, DeepEquals, map[string]*[]int{"test_slice_list_int": {1, 2}, "test_slice_list_int2": {3, 4}})
