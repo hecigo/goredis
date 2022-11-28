@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/hpi-tech/goutils"
 )
 
 type RankingBoard struct {
@@ -90,7 +91,11 @@ func (r *RankingBoard) UpsertMulti(members map[string]float64, kind ...RankingUp
 // If the member does not exist, it is added with increment as its score.
 // Returns the new score of the member.
 func (r *RankingBoard) IncrBy(member string, increment float64) (float64, error) {
-	return r.redis().ZIncrBy(r.Context, r.Id, increment, member).Result()
+	rs, err := r.redis().ZIncrBy(r.Context, r.Id, increment, member).Result()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	return rs, err
 }
 
 // Similar [IncrBy], but supports multiple members.
@@ -112,10 +117,14 @@ func (r *RankingBoard) IncrByMulti(increments map[string]float64) (map[string]fl
 	m := make(map[string]float64)
 	for _, cmd := range cmds {
 		c := cmd.(*redis.FloatCmd)
-		if c.Err() == nil {
+		err := c.Err()
+		if err == nil {
 			m[c.Args()[3].(string)] = c.Val()
 		} else {
-			return nil, c.Err()
+			if err == redis.Nil {
+				return nil, nil
+			}
+			return nil, err
 		}
 	}
 	return m, nil
@@ -139,6 +148,9 @@ func (r *RankingBoard) Top(n int64, orderBy ...bool) (map[string]float64, error)
 	}).Result()
 
 	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -151,7 +163,11 @@ func (r *RankingBoard) Top(n int64, orderBy ...bool) (map[string]float64, error)
 
 // Get score of a member in the ranking board.
 func (r *RankingBoard) Score(member string) (float64, error) {
-	return r.redis().ZScore(r.Context, r.Id, member).Result()
+	result, err := r.redis().ZScore(r.Context, r.Id, member).Result()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	return result, err
 }
 
 // Get scores of multiple members in the ranking board.
@@ -166,14 +182,23 @@ func (r *RankingBoard) Scores(members ...string) (map[string]float64, error) {
 	})
 
 	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
 		return nil, err
 	}
 
 	// parse result
 	m := make(map[string]float64)
 	for i, cmd := range cmds {
-		if cmd.Err() == nil {
+		err = cmd.Err()
+		if err == nil {
 			m[members[i]] = cmd.(*redis.FloatCmd).Val()
+		} else {
+			if err != redis.Nil {
+				goutils.Error("RankingBoard.Scores", "member", members[i], "error", err)
+			}
+			m[members[i]] = 0
 		}
 	}
 	return m, nil

@@ -54,23 +54,20 @@ func (s *RankingSuite) TestIncrByMulti(c *C) {
 		"member5": 5,
 	}
 
-	result, err := s.board.IncrByMulti(increments)
+	_, err := s.board.IncrByMulti(increments)
 	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
 }
 
 // Test Top
 func (s *RankingSuite) TestTop(c *C) {
-	result, err := s.board.Top(2, false)
+	_, err := s.board.Top(2, false)
 	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
 }
 
 // Test Scores
 func (s *RankingSuite) TestScores(c *C) {
-	result, err := s.board.Scores([]string{"member1", "member3"}...)
+	_, err := s.board.Scores([]string{"member1", "member3"}...)
 	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
 }
 
 // Test Expire

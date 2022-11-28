@@ -62,6 +62,14 @@ func (ms *HandlerSuite) TestGetVariousKinds(c *C) {
 	j, err := goredis.Get[TestStruct](ctxBg, "test_struct")
 	c.Assert(err, IsNil)
 	c.Assert(j, DeepEquals, TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
+
+	// get multiple struct
+	j2, err := goredis.Get[TestStruct](ctxBg, "test_struct", "test_struct2")
+	c.Assert(err, IsNil)
+	c.Assert(j2, DeepEquals, map[string]*TestStruct{
+		"test_struct":  {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
+		"test_struct2": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
+	})
 }
 
 // Test get hash from Redis

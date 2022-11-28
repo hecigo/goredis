@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${fileDirname}",
-      "args": ["-check.f", "RankingSuite"]
+      "args": ["-check.f", "HandlerSuite"]
     }
   ]
 }
