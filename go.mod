@@ -3,10 +3,10 @@ module github.com/hpi-tech/goredis
 go 1.19
 
 require (
-	github.com/go-redis/cache/v8 v8.4.3
+	github.com/go-redis/cache/v8 v8.4.4
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/goccy/go-json v0.9.11
-	github.com/hpi-tech/goutils v0.0.0-20221102104448-7d97f2010786
+	github.com/hpi-tech/goutils v0.0.0-20221124075740-545e27a64b56
 	go.elastic.co/apm/module/apmgoredisv8/v2 v2.2.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
@@ -34,11 +34,10 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.elastic.co/apm/v2 v2.2.0 // indirect
 	go.elastic.co/fastjson v1.1.0 // indirect
-	golang.org/x/exp v0.0.0-20221106115401-f9659909a136 // indirect
-	golang.org/x/mod v0.6.0 // indirect
+	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.2.0 // indirect
-	golang.org/x/tools v0.2.0 // indirect
+	golang.org/x/tools v0.3.0 // indirect
 	howett.net/plist v1.0.0 // indirect
 )
 

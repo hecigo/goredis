@@ -2,7 +2,7 @@ package goredis_test
 
 import (
 	"context"
-	"testing"
+	"fmt"
 	"time"
 
 	"github.com/hpi-tech/goredis"
@@ -10,12 +10,9 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-// Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) { TestingT(t) }
+type HandlerSuite struct{}
 
-type MySuite struct{}
-
-var _ = Suite(&MySuite{})
+var _ = Suite(&HandlerSuite{})
 
 type TestStruct struct {
 	Geo Geo `json:"geo"`
@@ -27,76 +24,111 @@ type Geo struct {
 	DistanceType string `json:"distance_type"`
 }
 
-func (s *MySuite) SetUpSuite(c *C) {
-	goutils.LoadEnv()
-	goutils.EnableLogrus()
-
-	// open redis client
+func (s *HandlerSuite) SetUpSuite(c *C) {
+	fmt.Println("SetUpSuite > HandlerSuite")
+	goutils.QuickLoad()
 	goredis.Open()
 }
 
-func (s *MySuite) TearDownSuite(c *C) {
+func (s *HandlerSuite) TearDownSuite(c *C) {
 	// close redis client
 	goredis.Close()
 }
 
-// Test get various kinds of data from Redis
-func (ms *MySuite) TestGetVariousKinds(c *C) {
+// Test set/get various kinds of data from Redis
+func (ms *HandlerSuite) TestVariousKinds(c *C) {
 	// get value from redis
-	ctxBg := context.Background()
-	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.SET)
+	ctx := context.Background()
 
+	err := goredis.Set(ctx, "test_string", "string")
+	c.Assert(err, IsNil)
 	s, err := goredis.Get[string](ctx, "test_string")
 	c.Assert(err, IsNil)
 	c.Assert(s, Equals, "string")
 
-	i, err := goredis.Get[int](ctxBg, "test_int")
+	err = goredis.Set(ctx, "test_int", 1)
+	c.Assert(err, IsNil)
+	i, err := goredis.Get[int](ctx, "test_int")
 	c.Assert(err, IsNil)
 	c.Assert(i, Equals, 1)
 
-	t, err := goredis.Get[time.Time](ctxBg, "test_time")
+	now := goutils.Now()
+	err = goredis.Set(ctx, "test_time", now)
 	c.Assert(err, IsNil)
-	at, _ := goutils.ParseTime("2022-10-26T14:19:08+07:00")
-	c.Assert(t, Equals, at)
+	t, err := goredis.Get[time.Time](ctx, "test_time")
+	c.Assert(err, IsNil)
+	c.Assert(t, DeepEquals, now)
 
-	d, err := goredis.Get[time.Duration](ctxBg, "test_duration")
+	err = goredis.Set(ctx, "test_duration", time.Second)
+	c.Assert(err, IsNil)
+	d, err := goredis.Get[time.Duration](ctx, "test_duration")
 	c.Assert(err, IsNil)
 	c.Assert(d, Equals, time.Second)
 
-	j, err := goredis.Get[TestStruct](ctxBg, "test_struct")
+	err = goredis.Set(ctx, "test_struct", TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
+	c.Assert(err, IsNil)
+	j, err := goredis.Get[TestStruct](ctx, "test_struct")
 	c.Assert(err, IsNil)
 	c.Assert(j, DeepEquals, TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
+
+	// get multiple struct
+	temp := TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}
+	err = goredis.MSet(ctx, map[string]interface{}{
+		"test_struct":  temp,
+		"test_struct2": temp,
+	})
+	c.Assert(err, IsNil)
+	j2, err := goredis.Get[TestStruct](ctx, "test_struct", "test_struct2")
+	c.Assert(err, IsNil)
+	c.Assert(j2, DeepEquals, map[string]*TestStruct{
+		"test_struct":  {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
+		"test_struct2": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
+	})
 }
 
-// Test get hash from Redis
-func (ms *MySuite) TestGetHash(c *C) {
+// Test set/get hash from Redis
+func (ms *HandlerSuite) TestHash(c *C) {
 	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.HASH)
 
 	// map[string]string
+	err := goredis.Set(ctx, "test_hash", map[string]string{"k1": "v1", "k2": "v2"})
+	c.Assert(err, IsNil)
 	m, err := goredis.Get[map[string]string](ctx, "test_hash")
 	c.Assert(err, IsNil)
 	c.Assert(m, DeepEquals, map[string]string{"k1": "v1", "k2": "v2"})
 
-	// map[string]struct
-	m2, err := goredis.Get[map[string]TestStruct](ctx, "test_hash_struct")
+	// struct
+	err = goredis.Set(ctx, "test_hash_struct", TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
 	c.Assert(err, IsNil)
-	c.Assert(m2, DeepEquals, map[string]TestStruct{
-		"geo": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}})
+	m2, err := goredis.Get[TestStruct](ctx, "test_hash_struct")
+	c.Assert(err, IsNil)
+	c.Assert(m2, DeepEquals, TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
 
 	// multiple keys of map[string]string
+	temp := map[string]string{"k1": "v1", "k2": "v2"}
+	err = goredis.MSet(ctx, map[string]interface{}{
+		"test_hash":  temp,
+		"test_hash2": temp,
+	})
+	c.Assert(err, IsNil)
 	mm, err := goredis.Get[map[string]string](ctx, "test_hash", "test_hash2")
 	c.Assert(err, IsNil)
-	c.Assert(mm, DeepEquals, map[string]*map[string]string{"test_hash": {"k1": "v1", "k2": "v2"}, "test_hash2": {"k3": "v3", "k4": "v4"}})
+	c.Assert(mm, DeepEquals, map[string]*map[string]string{"test_hash": {"k1": "v1", "k2": "v2"}, "test_hash2": {"k1": "v1", "k2": "v2"}})
 
 	// multiple keys of map[string]struct
+	tempStruct := map[string]TestStruct{
+		"geo": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
+	}
+	err = goredis.MSet(ctx, map[string]interface{}{
+		"test_hash_struct":  tempStruct,
+		"test_hash_struct2": tempStruct,
+	})
+	c.Assert(err, IsNil)
 	mm2, err := goredis.Get[map[string]TestStruct](ctx, "test_hash_struct", "test_hash_struct2")
 	c.Assert(err, IsNil)
 	c.Assert(mm2, DeepEquals, map[string]*map[string]TestStruct{
-		"test_hash_struct": {
-			"geo": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}},
-		"test_hash_struct2": {
-			"k3": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},
-			"k4": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}},
+		"test_hash_struct":  &tempStruct,
+		"test_hash_struct2": &tempStruct,
 	})
 
 	// map[string]int
@@ -125,23 +157,32 @@ func (ms *MySuite) TestGetHash(c *C) {
 }
 
 // Test get slice from Redis
-func (my *MySuite) TestGetSlice(c *C) {
+func (my *HandlerSuite) TestGetSlice(c *C) {
 	ctx := context.Background()
 
 	// LIST
 
 	// []string
 	ctxList := context.WithValue(ctx, goredis.CtxKey_DataType, goredis.LIST)
+	err := goredis.Set(ctxList, "test_slice_list", []string{"v1", "v2"})
+	c.Assert(err, IsNil)
 	s, err := goredis.Get[[]string](ctxList, "test_slice_list")
 	c.Assert(err, IsNil)
 	c.Assert(s, DeepEquals, []string{"v1", "v2"})
 
 	// []int
+	err = goredis.Set(ctxList, "test_slice_list_int", []int{1, 2})
+	c.Assert(err, IsNil)
 	i, err := goredis.Get[[]int](ctxList, "test_slice_list_int")
 	c.Assert(err, IsNil)
 	c.Assert(i, DeepEquals, []int{1, 2})
 
 	// multiple keys []int
+	err = goredis.MSet(ctxList, map[string]interface{}{
+		"test_slice_list_int":  []int{1, 2},
+		"test_slice_list_int2": []int{3, 4},
+	})
+	c.Assert(err, IsNil)
 	mi, err := goredis.Get[[]int](ctxList, "test_slice_list_int", "test_slice_list_int2")
 	c.Assert(err, IsNil)
 	c.Assert(mi, DeepEquals, map[string]*[]int{"test_slice_list_int": {1, 2}, "test_slice_list_int2": {3, 4}})
