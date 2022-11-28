@@ -28,6 +28,7 @@ func (s *HandlerSuite) SetUpSuite(c *C) {
 	fmt.Println("SetUpSuite > HandlerSuite")
 	goutils.LoadEnv()
 	goutils.EnableLogrus()
+	goutils.LoadLocation()
 	goredis.Open()
 }
 
@@ -39,32 +40,47 @@ func (s *HandlerSuite) TearDownSuite(c *C) {
 // Test get various kinds of data from Redis
 func (ms *HandlerSuite) TestGetVariousKinds(c *C) {
 	// get value from redis
-	ctxBg := context.Background()
-	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.SET)
+	ctx := context.Background()
 
+	err := goredis.Set(ctx, "test_string", "string")
+	c.Assert(err, IsNil)
 	s, err := goredis.Get[string](ctx, "test_string")
 	c.Assert(err, IsNil)
 	c.Assert(s, Equals, "string")
 
-	i, err := goredis.Get[int](ctxBg, "test_int")
+	err = goredis.Set(ctx, "test_int", 1)
+	c.Assert(err, IsNil)
+	i, err := goredis.Get[int](ctx, "test_int")
 	c.Assert(err, IsNil)
 	c.Assert(i, Equals, 1)
 
-	t, err := goredis.Get[time.Time](ctxBg, "test_time")
+	now := goutils.Now()
+	err = goredis.Set(ctx, "test_time", now)
 	c.Assert(err, IsNil)
-	at, _ := goutils.ParseTime("2022-10-26T14:19:08+07:00")
-	c.Assert(t, Equals, at)
+	t, err := goredis.Get[time.Time](ctx, "test_time")
+	c.Assert(err, IsNil)
+	c.Assert(t, DeepEquals, now)
 
-	d, err := goredis.Get[time.Duration](ctxBg, "test_duration")
+	err = goredis.Set(ctx, "test_duration", time.Second)
+	c.Assert(err, IsNil)
+	d, err := goredis.Get[time.Duration](ctx, "test_duration")
 	c.Assert(err, IsNil)
 	c.Assert(d, Equals, time.Second)
 
-	j, err := goredis.Get[TestStruct](ctxBg, "test_struct")
+	err = goredis.Set(ctx, "test_struct", TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
+	c.Assert(err, IsNil)
+	j, err := goredis.Get[TestStruct](ctx, "test_struct")
 	c.Assert(err, IsNil)
 	c.Assert(j, DeepEquals, TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
 
 	// get multiple struct
-	j2, err := goredis.Get[TestStruct](ctxBg, "test_struct", "test_struct2")
+	temp := TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}
+	err = goredis.MSet(ctx, map[string]interface{}{
+		"test_struct":  temp,
+		"test_struct2": temp,
+	})
+	c.Assert(err, IsNil)
+	j2, err := goredis.Get[TestStruct](ctx, "test_struct", "test_struct2")
 	c.Assert(err, IsNil)
 	c.Assert(j2, DeepEquals, map[string]*TestStruct{
 		"test_struct":  {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}},

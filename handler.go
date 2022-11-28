@@ -309,6 +309,11 @@ func getVariousKind[T any](ctx context.Context, keys ...string) (interface{}, er
 
 // Set any value to Redis as string.
 func setVariousKind(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	value, err := goutils.AnyToStr(value)
+	if err != nil {
+		return err
+	}
+
 	status, err := Client(ctx).Set(ctx, addKeyPrefix(ctx, key)[0], value, expiration).Result()
 	if err != nil {
 		return err
@@ -324,6 +329,15 @@ func setVariousKind(ctx context.Context, key string, value interface{}, expirati
 
 // Set multiple key-values to Redis as string.
 func setMultiVariousKind(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) error {
+	// convert time.Time to string
+	for k, v := range keyValues {
+		v, err := goutils.AnyToStr(v)
+		if err != nil {
+			return err
+		}
+		keyValues[k] = v
+	}
+
 	// add key prefix and convert keyValues to slice
 	var kv []interface{}
 	for k, v := range keyValues {
