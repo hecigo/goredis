@@ -37,8 +37,8 @@ func (s *HandlerSuite) TearDownSuite(c *C) {
 	goredis.Close()
 }
 
-// Test get various kinds of data from Redis
-func (ms *HandlerSuite) TestGetVariousKinds(c *C) {
+// Test set/get various kinds of data from Redis
+func (ms *HandlerSuite) TestVariousKinds(c *C) {
 	// get value from redis
 	ctx := context.Background()
 
@@ -88,25 +88,34 @@ func (ms *HandlerSuite) TestGetVariousKinds(c *C) {
 	})
 }
 
-// Test get hash from Redis
-func (ms *HandlerSuite) TestGetHash(c *C) {
+// Test set/get hash from Redis
+func (ms *HandlerSuite) TestHash(c *C) {
 	ctx := context.WithValue(context.Background(), goredis.CtxKey_DataType, goredis.HASH)
 
 	// map[string]string
+	err := goredis.Set(ctx, "test_hash", map[string]string{"k1": "v1", "k2": "v2"})
+	c.Assert(err, IsNil)
 	m, err := goredis.Get[map[string]string](ctx, "test_hash")
 	c.Assert(err, IsNil)
 	c.Assert(m, DeepEquals, map[string]string{"k1": "v1", "k2": "v2"})
 
-	// map[string]struct
-	m2, err := goredis.Get[map[string]TestStruct](ctx, "test_hash_struct")
+	// struct
+	err = goredis.Set(ctx, "test_hash_struct", TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
 	c.Assert(err, IsNil)
-	c.Assert(m2, DeepEquals, map[string]TestStruct{
-		"geo": {Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}}})
+	m2, err := goredis.Get[TestStruct](ctx, "test_hash_struct")
+	c.Assert(err, IsNil)
+	c.Assert(m2, DeepEquals, TestStruct{Geo{Loc: "10.757437,106.6794102", Unit: "km", DistanceType: "plane"}})
 
 	// multiple keys of map[string]string
+	temp := map[string]string{"k1": "v1", "k2": "v2"}
+	err = goredis.MSet(ctx, map[string]interface{}{
+		"test_hash":  temp,
+		"test_hash2": temp,
+	})
+	c.Assert(err, IsNil)
 	mm, err := goredis.Get[map[string]string](ctx, "test_hash", "test_hash2")
 	c.Assert(err, IsNil)
-	c.Assert(mm, DeepEquals, map[string]*map[string]string{"test_hash": {"k1": "v1", "k2": "v2"}, "test_hash2": {"k3": "v3", "k4": "v4"}})
+	c.Assert(mm, DeepEquals, map[string]*map[string]string{"test_hash": {"k1": "v1", "k2": "v2"}, "test_hash2": {"k1": "v1", "k2": "v2"}})
 
 	// multiple keys of map[string]struct
 	mm2, err := goredis.Get[map[string]TestStruct](ctx, "test_hash_struct", "test_hash_struct2")

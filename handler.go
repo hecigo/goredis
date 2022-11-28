@@ -189,7 +189,14 @@ func MSet(ctx context.Context, keyValues map[string]interface{}, expiration ...t
 		expi = expiration[0]
 	}
 
-	switch elKind := reflect.TypeOf(keyValues).Elem().Kind(); elKind {
+	// get first value of keyValues
+	var elKind reflect.Kind
+	for _, v := range keyValues {
+		elKind = reflect.TypeOf(v).Kind()
+		break
+	}
+
+	switch elKind {
 	// string
 	case reflect.String:
 		return setMultiVariousKind(ctx, keyValues, expi)
@@ -430,15 +437,24 @@ func getHash[T any](ctx context.Context, keys ...string) (interface{}, error) {
 // Set hash to Redis. The value must be a struct or a map.
 func setHash(ctx context.Context, key string, value interface{}, expiration time.Duration) (err error) {
 
-	// convert value to map[string]interface{}
-	var temp map[string]interface{}
+	// convert value to map[string]string
+	var temp map[string]string
 	switch value := value.(type) {
-	case map[string]interface{}:
+	case map[string]string:
 		temp = value
 	default:
-		temp, err = goutils.Unmarshal[map[string]interface{}](value)
+		temp2, err := goutils.Unmarshal[map[string]interface{}](value)
 		if err != nil {
 			return err
+		}
+		// convert temp2 to temp
+		temp = make(map[string]string)
+		for k, v := range temp2 {
+			v, err := goutils.AnyToStr(v)
+			if err != nil {
+				return err
+			}
+			temp[k] = v
 		}
 	}
 
@@ -450,15 +466,12 @@ func setHash(ctx context.Context, key string, value interface{}, expiration time
 
 	// set key-value
 	key = addKeyPrefix(ctx, key)[0]
-	status, err := Client(ctx).HMSet(ctx, key, val...).Result()
-	if err != nil {
+	cmd := Client(ctx).HMSet(ctx, key, val...)
+	err = cmd.Err()
+	if err != nil || !cmd.Val() {
+		goutils.Errorf("%s", cmd.String())
+		goutils.Error(err)
 		return err
-	}
-	if !status {
-		goutils.Errorf("setHash: status is %v", status)
-		goutils.Errorf("key is %s", key)
-		goutils.Errorf(" value is %v", value)
-		return errors.New("redis set status is not OK")
 	}
 
 	// set expiration
@@ -469,20 +482,30 @@ func setHash(ctx context.Context, key string, value interface{}, expiration time
 // Similar to [setHash], but support multiple key-values with pipeline.
 func setMultiHash(ctx context.Context, keyValues map[string]interface{}, expiration time.Duration) (err error) {
 	// convert keyValues to map[string][]interface{}
-	var temp map[string][]interface{}
+	temp := make(map[string][]interface{})
 	for key, value := range keyValues {
 		var val []interface{}
-		switch v := value.(type) {
-		case map[string]interface{}:
-			for k, v := range v {
+		switch value := value.(type) {
+		case map[string]string:
+			for k, v := range value {
 				val = append(val, k, v)
 			}
 		default:
-			m, err := goutils.Unmarshal[map[string]interface{}](v)
+			mi, err := goutils.Unmarshal[map[string]interface{}](value)
 			if err != nil {
 				return err
 			}
-			for k, v := range m {
+			// convert temp2 to temp
+			ms := make(map[string]string)
+			for k, v := range mi {
+				v, err := goutils.AnyToStr(v)
+				if err != nil {
+					return err
+				}
+				ms[k] = v
+			}
+
+			for k, v := range ms {
 				val = append(val, k, v)
 			}
 		}
@@ -494,7 +517,9 @@ func setMultiHash(ctx context.Context, keyValues map[string]interface{}, expirat
 		for key, val := range temp {
 			key = addKeyPrefix(ctx, key)[0]
 			pipe.HMSet(ctx, key, val...)
-			pipe.Expire(ctx, key, expiration)
+			if expiration > 0 {
+				pipe.Expire(ctx, key, expiration)
+			}
 		}
 		return nil
 	})
@@ -506,10 +531,7 @@ func setMultiHash(ctx context.Context, keyValues map[string]interface{}, expirat
 	for _, cmd := range cmds {
 		err := cmd.Err()
 		if err != nil {
-			key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
-			goutils.Errorf("setMultiHash: cmd[%s]", cmd.Args()[0].(string))
-			goutils.Errorf("%s", key)
-			goutils.Errorf("%v", keyValues[key])
+			goutils.Errorf("%s", cmd.String())
 			goutils.Error(err)
 			return err
 		}
@@ -594,7 +616,9 @@ func setMultiList(ctx context.Context, keyValues map[string]interface{}, expirat
 			key := addKeyPrefix(ctx, key)[0]
 			pipe.Del(ctx, key)
 			pipe.RPush(ctx, key, val...)
-			pipe.Expire(ctx, key, expiration)
+			if expiration > 0 {
+				pipe.Expire(ctx, key, expiration)
+			}
 		}
 		return nil
 	})
@@ -605,14 +629,8 @@ func setMultiList(ctx context.Context, keyValues map[string]interface{}, expirat
 	// check status
 	for _, cmd := range cmds {
 		err := cmd.Err()
-
-		// get key from cmd
-		key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
-
 		if err != nil {
-			goutils.Errorf("setMultiList: cmd[%s]", cmd.Args()[0].(string))
-			goutils.Errorf("%s", key)
-			goutils.Errorf("%v", keyValues[key])
+			goutils.Errorf("%s", cmd.String())
 			goutils.Error(err)
 			return err
 		}
@@ -682,7 +700,9 @@ func setMultiSet(ctx context.Context, keyValues map[string]interface{}, expirati
 			key := addKeyPrefix(ctx, key)[0]
 			pipe.Del(ctx, key)
 			pipe.SAdd(ctx, key, val...)
-			pipe.Expire(ctx, key, expiration)
+			if expiration > 0 {
+				pipe.Expire(ctx, key, expiration)
+			}
 		}
 		return nil
 	})
@@ -694,13 +714,8 @@ func setMultiSet(ctx context.Context, keyValues map[string]interface{}, expirati
 	for _, cmd := range cmds {
 		err := cmd.Err()
 
-		// get key from cmd
-		key := removeKeyPrefix(ctx, cmd.Args()[1].(string))[0]
-
 		if err != nil {
-			goutils.Errorf("setMultiSet: cmd[%s]", cmd.Args()[0].(string))
-			goutils.Errorf("%s", key)
-			goutils.Errorf("%v", keyValues[key])
+			goutils.Errorf("%s", cmd.String())
 			goutils.Error(err)
 			return err
 		}
@@ -831,14 +846,12 @@ func setExpiration(ctx context.Context, key string, expiration time.Duration) er
 		return nil
 	}
 
-	status, err := Client(ctx).Expire(ctx, key, expiration).Result()
-	if err != nil {
+	cmd := Client(ctx).Expire(ctx, key, expiration)
+	err := cmd.Err()
+	if err != nil || !cmd.Val() {
+		goutils.Errorf("%s", cmd.String())
+		goutils.Error(err)
 		return err
-	}
-	if !status {
-		goutils.Errorf("setExpiration: status is %v", status)
-		goutils.Errorf("key is %s", key)
-		return errors.New("redis set status is not OK")
 	}
 
 	return nil
