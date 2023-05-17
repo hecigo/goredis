@@ -1,6 +1,6 @@
 module github.com/hecigo/goredis
 
-go 1.19
+go 1.20
 
 require (
 	github.com/go-redis/cache/v8 v8.4.4
