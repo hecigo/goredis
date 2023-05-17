@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-redis/cache/v8"
 	json "github.com/goccy/go-json"
-	"github.com/hpi-tech/goutils"
+	"github.com/hecigo/goutils"
 )
 
 var caches map[string]*cache.Cache = make(map[string]*cache.Cache)

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hpi-tech/goredis"
-	"github.com/hpi-tech/goutils"
+	"github.com/hecigo/goredis"
+	"github.com/hecigo/goutils"
 	. "gopkg.in/check.v1"
 )
 

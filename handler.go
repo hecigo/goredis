@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/hpi-tech/goutils"
+	"github.com/hecigo/goutils"
 )
 
 type ctxKeyType_Redis string

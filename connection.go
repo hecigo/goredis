@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/hpi-tech/goutils"
+	"github.com/hecigo/goutils"
 	apmgoredis "go.elastic.co/apm/module/apmgoredisv8/v2"
 )
 
