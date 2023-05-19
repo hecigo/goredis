@@ -6,7 +6,7 @@ require (
 	github.com/go-redis/cache/v8 v8.4.4
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/goccy/go-json v0.10.2
-	github.com/hecigo/goutils v0.0.0-20230517091116-6afc65cc76f9
+	github.com/hecigo/goutils v0.0.0-20230519033910-bfef629263e1
 	go.elastic.co/apm/module/apmgoredisv8/v2 v2.4.1
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
@@ -39,5 +39,3 @@ require (
 	golang.org/x/tools v0.9.1 // indirect
 	howett.net/plist v1.0.0 // indirect
 )
-
-replace github.com/hecigo/goutils => ../goutils
